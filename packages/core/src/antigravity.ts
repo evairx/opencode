@@ -160,7 +160,7 @@ function effortOf(value: unknown): Effort | undefined {
 
 // agy CLI models that do not expose reasoning-effort variants. Their ID is
 // used verbatim instead of folding an effort suffix into `--model`.
-const VARIANTLESS_MODELS = new Set(["claude-sonret-4.6", "claude-opus-4.6"])
+const VARIANTLESS_MODELS = new Set(["claude-sonnet-4-6", "claude-opus-4-6-thinking"])
 
 export function createLanguageModel(modelID: string, options: Record<string, unknown>): LanguageModelV3 {
   // agy bakes the reasoning effort into the model name for Gemini-family

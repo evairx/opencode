@@ -30,18 +30,95 @@ interface ModelDef {
   id: string
   name: string
   family: string
+  context: number
   effort?: "low" | "medium" | "high"
   variants?: typeof GEMINI_VARIANTS
+  cost: {
+    input: number
+    output: number
+    cache: { read: number; write: number }
+    over200K?: {
+      input: number
+      output: number
+      cache: { read: number; write: number }
+    }
+  }
 }
 
+const FLASH_COST = { input: 0.75, output: 3.75, cache: { read: 0, write: 0 } }
+const GEMINI_CONTEXT = 1_000_000
+const CLAUDE_CONTEXT = 250_000
+const GPT_OSS_CONTEXT = 131_072
+const GEMINI_PRO_COST = {
+  input: 2,
+  output: 12,
+  cache: { read: 0, write: 0 },
+  over200K: { input: 4, output: 18, cache: { read: 0, write: 0 } },
+}
+const CLAUDE_SONNET_COST = { input: 3, output: 15, cache: { read: 0, write: 0 } }
+const CLAUDE_OPUS_COST = { input: 5, output: 25, cache: { read: 0, write: 0 } }
+const GPT_OSS_COST = { input: 0.15, output: 0.6, cache: { read: 0, write: 0 } }
+
 const MODELS: ModelDef[] = [
-  { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", family: "gemini-flash", effort: "low", variants: GEMINI_VARIANTS },
-  { id: "gemini-3.7-flash", name: "Gemini 3.7 Flash", family: "gemini-flash", effort: "low", variants: GEMINI_VARIANTS },
-  { id: "gemini-3.6-flash", name: "Gemini 3.6 Flash", family: "gemini-flash", effort: "low", variants: GEMINI_VARIANTS },
-  { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro", family: "gemini-pro", effort: "low", variants: GEMINI_PRO_VARIANTS },
-  { id: "claude-sonret-4.6", name: "Claude Sonnet 4.6", family: "claude" },
-  { id: "claude-opus-4.6", name: "Claude Opus 4.6", family: "claude" },
-  { id: "gpt-oss-120b", name: "GPT-OSS 120B", family: "gpt-oss", effort: "medium", variants: GPT_OSS_VARIANTS },
+  {
+    id: "gemini-3.8-flash",
+    name: "Gemini 3.8 Flash",
+    family: "gemini-flash",
+    context: GEMINI_CONTEXT,
+    effort: "low",
+    variants: GEMINI_VARIANTS,
+    cost: FLASH_COST,
+  },
+  {
+    id: "gemini-3.7-flash",
+    name: "Gemini 3.7 Flash",
+    family: "gemini-flash",
+    context: GEMINI_CONTEXT,
+    effort: "low",
+    variants: GEMINI_VARIANTS,
+    cost: FLASH_COST,
+  },
+  {
+    id: "gemini-3.6-flash",
+    name: "Gemini 3.6 Flash",
+    family: "gemini-flash",
+    context: GEMINI_CONTEXT,
+    effort: "low",
+    variants: GEMINI_VARIANTS,
+    cost: FLASH_COST,
+  },
+  {
+    id: "gemini-3.1-pro",
+    name: "Gemini 3.1 Pro",
+    family: "gemini-pro",
+    context: GEMINI_CONTEXT,
+    effort: "low",
+    variants: GEMINI_PRO_VARIANTS,
+    cost: GEMINI_PRO_COST,
+  },
+  {
+    id: "claude-sonnet-4-6",
+    name: "Claude Sonnet 4.6",
+    family: "claude",
+    context: CLAUDE_CONTEXT,
+    cost: CLAUDE_SONNET_COST,
+  },
+  {
+    id: "claude-opus-4-6-thinking",
+    name: "Claude Opus 4.6",
+    family: "claude",
+    context: CLAUDE_CONTEXT,
+    cost: CLAUDE_OPUS_COST,
+  },
+  {
+    id: "gpt-oss-120b-medium",
+    name: "GPT-OSS 120B",
+    family: "gpt-oss",
+    context: GPT_OSS_CONTEXT,
+    effort: "medium",
+    variants: GPT_OSS_VARIANTS,
+    cost: GPT_OSS_COST,
+  },
 ]
 
 const oauth = {
@@ -105,10 +182,24 @@ export const AntigravityPlugin = define({
             input: ["text"],
             output: ["text"],
           }
-          // The CLI reports runtime token usage. $0.75/$3.75 per million
-          // tokens is Antigravity's advertised Gemini 3.8 Flash price.
-          draft.cost = [{ input: 0.75, output: 3.75, cache: { read: 0, write: 0 } }]
-          draft.limit = { context: 1_000_000, input: 1_000_000, output: 65_536 }
+          // The CLI reports runtime token usage. Keep the per-model prices in
+          // the catalog so OpenCode can calculate the monetary cost from the
+          // normalized token usage. Gemini Pro has a separate price tier when
+          // the prompt context exceeds 200k tokens.
+          draft.cost = [
+            { input: def.cost.input, output: def.cost.output, cache: def.cost.cache },
+            ...(def.cost.over200K
+              ? [
+                  {
+                    tier: { type: "context" as const, size: 200_000 },
+                    input: def.cost.over200K.input,
+                    output: def.cost.over200K.output,
+                    cache: def.cost.over200K.cache,
+                  },
+                ]
+              : []),
+          ]
+          draft.limit = { context: def.context, input: def.context, output: 65_536 }
           draft.status = "active"
           draft.enabled = true
           if (def.variants) draft.variants = def.variants

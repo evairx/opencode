@@ -1374,6 +1374,10 @@ const ANTIGRAVITY_GPT_OSS_VARIANTS = {
   medium: { effort: "medium" },
 } satisfies Record<string, { effort: "low" | "medium" | "high" }>
 
+const ANTIGRAVITY_GEMINI_CONTEXT = 1_000_000
+const ANTIGRAVITY_CLAUDE_CONTEXT = 250_000
+const ANTIGRAVITY_GPT_OSS_CONTEXT = 131_072
+
 function antigravityProvider(): Info {
   const providerID = ProviderV2.ID.make("antigravity")
   // Reasoning effort is switched through model variants, which the adapter
@@ -1383,8 +1387,10 @@ function antigravityProvider(): Info {
     id: string
     name: string
     family?: string
+    context: number
     effort?: "low" | "medium" | "high"
     variants: Record<string, { effort: "low" | "medium" | "high" }> | undefined
+    cost: Model["cost"]
   }): Model => ({
     id: ModelV2.ID.make(input.id),
     providerID,
@@ -1394,10 +1400,10 @@ function antigravityProvider(): Info {
     status: "active",
     headers: {},
     options: input.effort ? { effort: input.effort } : {},
-    // The CLI reports runtime token usage. $0.75/$3.75 per million tokens is
-    // Antigravity's advertised Gemini 3.8 Flash price.
-    cost: { input: 0.75, output: 3.75, cache: { read: 0, write: 0 } },
-    limit: { context: 1_000_000, input: 1_000_000, output: 65_536 },
+    // The CLI reports runtime token usage. Keep these rates in the fallback
+    // catalog too, because it is used when the plugin catalog is unavailable.
+    cost: input.cost,
+    limit: { context: input.context, input: input.context, output: 65_536 },
     capabilities: {
       temperature: false,
       reasoning: true,
@@ -1417,48 +1423,67 @@ function antigravityProvider(): Info {
       id: "gemini-3.8-flash",
       name: "Gemini 3.8 Flash",
       family: "gemini-flash",
+      context: ANTIGRAVITY_GEMINI_CONTEXT,
       effort: "low",
       variants: ANTIGRAVITY_VARIANTS,
+      cost: { input: 0.75, output: 3.75, cache: { read: 0, write: 0 } },
     }),
     "gemini-3.7-flash": model({
       id: "gemini-3.7-flash",
       name: "Gemini 3.7 Flash",
       family: "gemini-flash",
+      context: ANTIGRAVITY_GEMINI_CONTEXT,
       effort: "low",
       variants: ANTIGRAVITY_VARIANTS,
+      cost: { input: 0.75, output: 3.75, cache: { read: 0, write: 0 } },
     }),
     "gemini-3.6-flash": model({
       id: "gemini-3.6-flash",
       name: "Gemini 3.6 Flash",
       family: "gemini-flash",
+      context: ANTIGRAVITY_GEMINI_CONTEXT,
       effort: "low",
       variants: ANTIGRAVITY_VARIANTS,
+      cost: { input: 0.75, output: 3.75, cache: { read: 0, write: 0 } },
     }),
     "gemini-3.1-pro": model({
       id: "gemini-3.1-pro",
       name: "Gemini 3.1 Pro",
       family: "gemini-pro",
+      context: ANTIGRAVITY_GEMINI_CONTEXT,
       effort: "low",
       variants: ANTIGRAVITY_PRO_VARIANTS,
+      cost: {
+        input: 2,
+        output: 12,
+        cache: { read: 0, write: 0 },
+        experimentalOver200K: { input: 4, output: 18, cache: { read: 0, write: 0 } },
+      },
     }),
-    "claude-sonret-4.6": model({
-      id: "claude-sonret-4.6",
+    "claude-sonnet-4-6": model({
+      id: "claude-sonnet-4-6",
       name: "Claude Sonnet 4.6",
       family: "claude",
+      context: ANTIGRAVITY_CLAUDE_CONTEXT,
       variants: undefined,
+      cost: { input: 3, output: 15, cache: { read: 0, write: 0 } },
     }),
-    "claude-opus-4.6": model({
-      id: "claude-opus-4.6",
+    "claude-opus-4-6-thinking": model({
+      id: "claude-opus-4-6-thinking",
       name: "Claude Opus 4.6",
       family: "claude",
+      context: ANTIGRAVITY_CLAUDE_CONTEXT,
       variants: undefined,
+      cost: { input: 5, output: 25, cache: { read: 0, write: 0 } },
     }),
-    "gpt-oss-120b": model({
-      id: "gpt-oss-120b",
+    "gpt-oss-120b-medium": model({
+      id: "gpt-oss-120b-medium",
       name: "GPT-OSS 120B",
       family: "gpt-oss",
+      context: ANTIGRAVITY_GPT_OSS_CONTEXT,
       effort: "medium",
       variants: ANTIGRAVITY_GPT_OSS_VARIANTS,
+      cost: { input: 0.15, output: 0.6, cache: { read: 0, write: 0 } },
     }),
   }
   return {
