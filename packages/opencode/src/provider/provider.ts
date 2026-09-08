@@ -137,6 +137,10 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
   "@ai-sdk/github-copilot": () =>
     import("@opencode-ai/core/github-copilot/copilot-provider").then((m) => m.createOpenaiCompatible),
   "venice-ai-sdk-provider": () => import("venice-ai-sdk-provider").then((m) => m.createVenice),
+  "opencode-antigravity": () =>
+    import("@opencode-ai/core/antigravity").then((m) => (opts: Record<string, unknown>) => ({
+      languageModel: (modelID: string) => m.createLanguageModel(modelID, opts),
+    })),
 }
 
 type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>, model?: Model) => Promise<any>
@@ -173,6 +177,15 @@ function selectBedrockMantleLanguageModel(sdk: BundledSDK, modelID: string) {
 
 function custom(dep: CustomDep): Record<string, CustomLoader> {
   return {
+    antigravity: () =>
+      Effect.succeed({
+        // The account session lives in agy's system keyring; it is created by
+        // the OAuth code flow rather than by an HTTP API key.
+        autoload: true,
+        async getModel(sdk: BundledSDK, modelID: string) {
+          return sdk.languageModel(modelID)
+        },
+      }),
     anthropic: () =>
       Effect.succeed({
         autoload: false,
@@ -1346,6 +1359,118 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
+const ANTIGRAVITY_VARIANTS = {
+  low: { effort: "low" },
+  medium: { effort: "medium" },
+  high: { effort: "high" },
+} satisfies Record<string, { effort: "low" | "medium" | "high" }>
+
+const ANTIGRAVITY_PRO_VARIANTS = {
+  low: { effort: "low" },
+  high: { effort: "high" },
+} satisfies Record<string, { effort: "low" | "medium" | "high" }>
+
+const ANTIGRAVITY_GPT_OSS_VARIANTS = {
+  medium: { effort: "medium" },
+} satisfies Record<string, { effort: "low" | "medium" | "high" }>
+
+function antigravityProvider(): Info {
+  const providerID = ProviderV2.ID.make("antigravity")
+  // Reasoning effort is switched through model variants, which the adapter
+  // folds back into the `agy --model <id>-<effort>` spawn. Models without
+  // variants (Claude) use their ID verbatim.
+  const model = (input: {
+    id: string
+    name: string
+    family?: string
+    effort?: "low" | "medium" | "high"
+    variants: Record<string, { effort: "low" | "medium" | "high" }> | undefined
+  }): Model => ({
+    id: ModelV2.ID.make(input.id),
+    providerID,
+    name: input.name,
+    family: input.family,
+    api: { id: input.id, npm: "opencode-antigravity", url: "" },
+    status: "active",
+    headers: {},
+    options: input.effort ? { effort: input.effort } : {},
+    // The CLI reports runtime token usage. $0.75/$3.75 per million tokens is
+    // Antigravity's advertised Gemini 3.8 Flash price.
+    cost: { input: 0.75, output: 3.75, cache: { read: 0, write: 0 } },
+    limit: { context: 1_000_000, input: 1_000_000, output: 65_536 },
+    capabilities: {
+      temperature: false,
+      reasoning: true,
+      attachment: false,
+      toolcall: false,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    release_date: "",
+    // Omit the key entirely for variantless models: an explicit `undefined`
+    // fails `Schema.Record` decoding and would drop the model in toPublicInfo.
+    ...(input.variants ? { variants: input.variants } : {}),
+  })
+  const models: Record<string, Model> = {
+    "gemini-3.8-flash": model({
+      id: "gemini-3.8-flash",
+      name: "Gemini 3.8 Flash",
+      family: "gemini-flash",
+      effort: "low",
+      variants: ANTIGRAVITY_VARIANTS,
+    }),
+    "gemini-3.7-flash": model({
+      id: "gemini-3.7-flash",
+      name: "Gemini 3.7 Flash",
+      family: "gemini-flash",
+      effort: "low",
+      variants: ANTIGRAVITY_VARIANTS,
+    }),
+    "gemini-3.6-flash": model({
+      id: "gemini-3.6-flash",
+      name: "Gemini 3.6 Flash",
+      family: "gemini-flash",
+      effort: "low",
+      variants: ANTIGRAVITY_VARIANTS,
+    }),
+    "gemini-3.1-pro": model({
+      id: "gemini-3.1-pro",
+      name: "Gemini 3.1 Pro",
+      family: "gemini-pro",
+      effort: "low",
+      variants: ANTIGRAVITY_PRO_VARIANTS,
+    }),
+    "claude-sonret-4.6": model({
+      id: "claude-sonret-4.6",
+      name: "Claude Sonnet 4.6",
+      family: "claude",
+      variants: undefined,
+    }),
+    "claude-opus-4.6": model({
+      id: "claude-opus-4.6",
+      name: "Claude Opus 4.6",
+      family: "claude",
+      variants: undefined,
+    }),
+    "gpt-oss-120b": model({
+      id: "gpt-oss-120b",
+      name: "GPT-OSS 120B",
+      family: "gpt-oss",
+      effort: "medium",
+      variants: ANTIGRAVITY_GPT_OSS_VARIANTS,
+    }),
+  }
+  return {
+    id: providerID,
+    name: "Antigravity",
+    source: "custom",
+    env: [],
+    options: {},
+    models,
+  }
+}
+
 function modeOptions(model: Model, body: Record<string, unknown> | undefined) {
   if (!body) return model.options
   const options = Object.fromEntries(
@@ -1403,6 +1528,8 @@ const layer = Layer.effect(
         const cfg = yield* config.get()
         const modelsDev = yield* modelsDevSvc.get()
         const catalog = mapValues(modelsDev, fromModelsDevProvider)
+        const antigravity = antigravityProvider()
+        catalog[antigravity.id] = antigravity
         const database = mapValues(catalog, toPublicInfo)
 
         const providers: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>

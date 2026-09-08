@@ -15,6 +15,7 @@ import { isConsoleManagedProvider } from "../util/provider-origin"
 import { useConnected } from "./use-connected"
 import { useBindings } from "../keymap"
 import { useClipboard } from "../context/clipboard"
+import open from "open"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -317,6 +318,10 @@ function CodeMethod(props: CodeMethodProps) {
   const sync = useSync()
   const dialog = useDialog()
   const [error, setError] = createSignal(false)
+
+  onMount(() => {
+    if (props.providerID === "antigravity") void open(props.authorization.url).catch(() => {})
+  })
 
   return (
     <DialogPrompt

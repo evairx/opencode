@@ -40,6 +40,7 @@ import { LocationProvider } from "./context/location"
 import { LocalProvider, useLocal } from "./context/local"
 import { PermissionProvider } from "./context/permission"
 import { DialogModel } from "./component/dialog-model"
+import { DialogUsage } from "./component/dialog-usage"
 import { useConnected } from "./component/use-connected"
 import { DialogMcp } from "./component/dialog-mcp"
 import { DialogStatus } from "./component/dialog-status"
@@ -951,6 +952,19 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         run: () => {
           local.permission.toggle()
           dialog.clear()
+        },
+      },
+      {
+        name: "antigravity.usage",
+        title: "Usage model",
+        category: "Antigravity",
+        slashName: "usage",
+        // Only meaningful while an Antigravity model is active; hide it
+        // otherwise so /usage and Ctrl+P stay clean.
+        enabled: () => local.model.current()?.providerID === "antigravity",
+        suggested: () => local.model.current()?.providerID === "antigravity",
+        run: () => {
+          dialog.replace(() => <DialogUsage />)
         },
       },
     ].map((command) => ({

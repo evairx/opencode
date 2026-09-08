@@ -1612,7 +1612,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   }
 
   return (
-    <Show when={content() || opaque()}>
+    <Show when={content() || (opaque() && !isDone())}>
       <box
         ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
         paddingLeft={3}

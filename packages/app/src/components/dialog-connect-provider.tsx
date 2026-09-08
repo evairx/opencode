@@ -941,8 +941,10 @@ function ProviderConnection(props: {
     })
 
     onMount(() => {
-      if (!newLayout()) return
-      codeInput?.focus({ preventScroll: true })
+      if (newLayout()) codeInput?.focus({ preventScroll: true })
+      if (props.provider === "antigravity") {
+        platform.openExternal(store.authorization!.url)
+      }
     })
 
     async function handleSubmit(e: SubmitEvent) {
