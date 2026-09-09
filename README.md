@@ -44,63 +44,46 @@
 >
 > Este fork existe para mantener integraciones y ajustes personales, entre ellos **Antigravity CLI**, **CommandCode**, cálculo de uso/precios y mejoras de la interfaz TUI. El repositorio oficial es [anomalyco/opencode](https://github.com/anomalyco/opencode). Los cambios de este proyecto se publican únicamente en el fork de [evairx/opencode](https://github.com/evairx/opencode).
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://github.com/evairx/opencode/releases)
 
 ---
 
 ### Installation
 
-```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
+**evairx opencode** is compatible with the original OpenCode: it **replaces** your
+global `opencode` binary and does **not** delete your config files or plugins.
 
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
+Copy-paste install — Windows **CMD or PowerShell** (one line):
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/evairx/opencode/dev/install.ps1 | iex"
 ```
 
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
+Or download and run it:
 
-### Desktop App (BETA)
-
-OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
-
-| Platform              | Download                           |
-| --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm`, or `.AppImage`     |
-
-```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
+```powershell
+curl -fsSL -o install.ps1 https://raw.githubusercontent.com/evairx/opencode/dev/install.ps1
+powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
-#### Installation Directory
-
-The install script respects the following priority order for the installation path:
-
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
+macOS / Linux (curl):
 
 ```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://raw.githubusercontent.com/evairx/opencode/dev/install | bash
 ```
+
+The binary is installed to `~/.opencode/bin` and `opencode` keeps working as usual.
+
+> [!WARNING]
+> This fork ships its own providers (Antigravity, Codex, CommandCode, ...) and its
+> own usage/credentials handling. When you connect providers on this build, the
+> **previously stored providers and credentials** of the original OpenCode build
+> are **cleaned**. Your config files and plugins are preserved (backups are created
+> when using `-Clean`).
+
+### Usage
+
+![OpenCode usage and model quotas](packages/web/src/assets/lander/screenshot-usage.png)
 
 ### Agents
 

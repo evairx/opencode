@@ -5,15 +5,17 @@
     Installs the evairx opencode fork (build 1.0 / identity evairx-1.0) as the
     global `opencode`.
 
-    What it does:
-      1. Detects an already installed opencode (any opencode.exe in PATH or
-         ~\.opencode\bin).
-      2. Backs up the whole opencode config/data folders to
-         ~\.opencode-evairx-backups\<timestamp>\  (safe and reversible).
-      3. Removes the previous "custom" provider/model sections from the global
-         opencode config, leaving plugins (and every other setting) intact.
-      4. Replaces the global binary with this build at ~\.opencode\bin and
-         makes sure that folder is on the user PATH.
+    Default (replace-only):
+      1. Detects an already installed opencode.
+      2. Replaces the global binary with this build at ~\.opencode\bin.
+      3. Makes sure ~\.opencode\bin is first on the user PATH.
+      Your config files and plugins are NOT touched.
+
+    Optional cleanup (-Clean):
+      Backs up the whole opencode config/data folders to
+      ~\.opencode-evairx-backups\<timestamp>\ and removes previous "custom"
+      provider/model sections from the global opencode config (plugins and
+      everything else are preserved). Safe and reversible.
 
     The official package-manager installs (npm/scoop/choco) are not removed;
     this installer owns ~\.opencode\bin and wins when it is earlier on PATH.
@@ -21,11 +23,14 @@
     powershell -ExecutionPolicy Bypass -File install.ps1
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File install.ps1 -Force
+.EXAMPLE
+    powershell -ExecutionPolicy Bypass -File install.ps1 -Clean
 #>
 param(
     [string]$Version = "1.0",
     [string]$Repo = "evairx/opencode",
     [switch]$Force,
+    [switch]$Clean,
     [switch]$SkipBackup,
     [switch]$NoModifyPath,
     [switch]$SkipPath
@@ -176,10 +181,13 @@ if ($installed) {
         Write-Warn "opencode is currently running. Close it first, or pass -Force."
         exit 1
     }
-    if (-not $SkipBackup) {
-        Backup-Previous $configDir $dataDir | Out-Null
+    Write-Info "Config files and plugins are preserved (replace-only)."
+    if ($Clean) {
+        if (-not $SkipBackup) {
+            Backup-Previous $configDir $dataDir | Out-Null
+        }
+        Clear-CustomProviders $configDir
     }
-    Clear-CustomProviders $configDir
 } else {
     Write-Info "No opencode found on PATH. Installing fresh."
 }
