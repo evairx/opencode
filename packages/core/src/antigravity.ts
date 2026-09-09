@@ -1,9 +1,18 @@
 import { spawn as spawnChild } from "node:child_process"
 import type { LanguageModelV3, LanguageModelV3StreamPart, SharedV3ProviderMetadata } from "@ai-sdk/provider"
 import type { Disp } from "#pty"
+import { acquireAgyConversation, type AgyConversation } from "./antigravity-session"
 
 const AUTHORIZATION_URL = /https:\/\/accounts\.google\.com\/o\/oauth2\/auth\?[^\s]+/
 const AGY = process.platform === "win32" ? "agy.exe" : "agy"
+
+// Terms note: this adapter drives the official `agy` CLI through its documented
+// stream-json protocol; OpenCode never talks to Google directly and never reads
+// the OAuth token (auth lives in agy's keyring). Shelling out to the official
+// CLI is NOT a guarantee of Antigravity consumer-ToS compliance: Google's FAQ
+// names OpenCode as unsupported with an Antigravity product login and recommends
+// Vertex/AI Studio API keys for third-party agents. Nothing here evades
+// detection, alters telemetry, or reuses extracted credentials.
 
 type OAuthSession = {
   readonly url: string
@@ -137,7 +146,7 @@ function usage(input: unknown): StreamUsage {
   } as StreamUsage
 }
 
-function metadata(input: unknown): SharedV3ProviderMetadata {
+function metadata(input: unknown, conversationID?: string): SharedV3ProviderMetadata {
   if (!record(input)) return { antigravity: {} }
   const payload = record(input.result) ? input.result : record(input.step_update) ? input.step_update : input
   const source = record(payload.usage) ? payload.usage : payload
@@ -148,6 +157,9 @@ function metadata(input: unknown): SharedV3ProviderMetadata {
     antigravity: {
       usage: source,
       ...(cost === undefined ? {} : { cost }),
+      // Native agy conversation id, persisted so a restarted OpenCode can
+      // resume the exact Antigravity conversation instead of starting over.
+      ...(conversationID === undefined ? {} : { conversation_id: conversationID }),
     },
   } as SharedV3ProviderMetadata
 }
@@ -161,6 +173,74 @@ function effortOf(value: unknown): Effort | undefined {
 // agy CLI models that do not expose reasoning-effort variants. Their ID is
 // used verbatim instead of folding an effort suffix into `--model`.
 const VARIANTLESS_MODELS = new Set(["claude-sonnet-4-6", "claude-opus-4-6-thinking"])
+
+// Per-request routing metadata OpenCode attaches to providerOptions.antigravity.
+// It identifies which native agy conversation a turn belongs to and whether the
+// call is the real user conversation or an internal OpenCode task (title,
+// summary, compaction, subagents) that must never pollute that conversation.
+type AntigravityRequestMeta = {
+  readonly sessionID?: string
+  readonly messageID?: string
+  readonly conversationID?: string
+  readonly cwd?: string
+  readonly stateDir?: string
+  readonly kind: "main" | "internal"
+}
+
+function antigravityMeta(streamOptions: Record<string, unknown>): AntigravityRequestMeta {
+  const providerOptions = record(streamOptions.providerOptions) ? streamOptions.providerOptions : undefined
+  const namespace = record(providerOptions?.antigravity) ? providerOptions.antigravity : undefined
+  const meta = record(namespace?.opencode) ? namespace.opencode : undefined
+  const sessionID = typeof meta?.sessionID === "string" ? meta.sessionID : undefined
+  const messageID = typeof meta?.messageID === "string" ? meta.messageID : undefined
+  const conversationID = typeof meta?.conversationID === "string" ? meta.conversationID : undefined
+  const cwd = typeof meta?.cwd === "string" ? meta.cwd : undefined
+  const stateDir = typeof meta?.stateDir === "string" ? meta.stateDir : undefined
+  const kind = meta?.kind === "internal" ? "internal" : "main"
+  return { sessionID, messageID, conversationID, cwd, stateDir, kind }
+}
+
+// The last user message is the only content that reaches a native agy
+// conversation on a continuation turn; agy owns the rest of the history.
+function lastUserText(input: unknown): string {
+  if (typeof input === "string") return input
+  if (!Array.isArray(input)) return ""
+  for (let index = input.length - 1; index >= 0; index--) {
+    const message = input[index]
+    if (!record(message) || message.role !== "user") continue
+    const parts = Array.isArray(message.content) ? message.content : [message.content]
+    const text = parts
+      .map((part) => {
+        if (typeof part === "string") return part
+        if (!record(part)) return ""
+        if (typeof part.text === "string") return part.text
+        if (typeof part.output === "string") return part.output
+        return ""
+      })
+      .filter((value) => value !== "")
+      .join("\n")
+    if (text.trim()) return text
+  }
+  return ""
+}
+
+// agy completes a turn inside its own process even if OpenCode drops the
+// stream; retrying the same OpenCode message then re-emits the stored parts
+// instead of duplicating the turn inside the native conversation.
+type CachedTurn = {
+  readonly userID: string
+  readonly parts: readonly LanguageModelV3StreamPart[]
+  readonly usage: StreamUsage
+  readonly metadata: SharedV3ProviderMetadata | undefined
+}
+const completedTurns = new Map<string, CachedTurn>()
+
+// Build the finish `usage` from per-turn counters when the session engine could
+// diff them, and fall back to agy's cumulative counters otherwise.
+function turnUsage(summary: { countersDelta?: Record<string, number>; event: Record<string, unknown> }): StreamUsage {
+  if (summary.countersDelta === undefined) return usage(summary.event)
+  return usage({ event: "result", result: { usage: summary.countersDelta } })
+}
 
 export function createLanguageModel(modelID: string, options: Record<string, unknown>): LanguageModelV3 {
   // agy bakes the reasoning effort into the model name for Gemini-family
@@ -181,19 +261,33 @@ export function createLanguageModel(modelID: string, options: Record<string, unk
       : `${modelID}-${effort}`
 
   const doStream = async (options: Parameters<LanguageModelV3["doStream"]>[0]) => {
-    let processOutput = ""
-    let processError = ""
-    let sent = ""
+    const meta = antigravityMeta(options)
+    const persistent = meta.sessionID !== undefined && meta.kind === "main"
+    // A retry of the exact OpenCode message agy already answered re-emits the
+    // stored stream instead of duplicating the turn in the native conversation.
+    const replay =
+      persistent && meta.messageID !== undefined && completedTurns.get(meta.sessionID!)?.userID === meta.messageID
+    const cwd = meta.cwd ?? process.cwd()
+    let cancelled = false
+    let conversation: AgyConversation | undefined
     let child: ReturnType<typeof spawnChild> | undefined
-    let lastEvent: unknown
-    let cliError: string | undefined
-    // agy executes tools inside its own loop; mirror each step as a native
-    // provider-executed tool call so the TUI renders them like real tools.
-    const toolCalls = new Map<string, string>()
 
     const stream = new ReadableStream<LanguageModelV3StreamPart>({
       start(controller) {
         controller.enqueue({ type: "stream-start", warnings: [] })
+        if (replay) {
+          const cached = completedTurns.get(meta.sessionID!)!
+          for (const part of cached.parts) controller.enqueue(part)
+          controller.enqueue({
+            type: "finish",
+            usage: cached.usage,
+            finishReason: { unified: "stop", raw: "agy" },
+            providerMetadata: cached.metadata,
+          })
+          controller.close()
+          return
+        }
+
         // Defer text-start until the first text delta. agy interleaves tool
         // calls before the final answer; opening the text part up front would
         // store it before the tool parts, so the TUI renders the answer above
@@ -202,7 +296,7 @@ export function createLanguageModel(modelID: string, options: Record<string, unk
         const startText = () => {
           if (textStarted) return
           textStarted = true
-          controller.enqueue({ type: "text-start", id: "antigravity" })
+          emit({ type: "text-start", id: "antigravity" })
         }
         // agy stays silent while it reasons (~5s warmup) before the first text
         // delta. The TUI renders an opaque "Thinking…" block while this part is
@@ -213,16 +307,165 @@ export function createLanguageModel(modelID: string, options: Record<string, unk
         const endThinking = () => {
           if (!thinking) return
           thinking = false
-          controller.enqueue({ type: "reasoning-end", id: reasoningID })
+          emit({ type: "reasoning-end", id: reasoningID })
         }
-        controller.enqueue({
+        let sent = ""
+        let lastEvent: unknown
+        let cliError: string | undefined
+        // agy executes tools inside its own loop; mirror each step as a native
+        // provider-executed tool call so the TUI renders them like real tools.
+        const toolCalls = new Map<string, string>()
+        // Persistent main turns record their emitted parts so an exact retry of
+        // the same message can replay them without touching agy again.
+        const capturing = persistent
+        const captured: LanguageModelV3StreamPart[] = []
+        const emit = (part: LanguageModelV3StreamPart) => {
+          try {
+            controller.enqueue(part)
+          } catch {}
+          if (capturing && part.type !== "stream-start" && part.type !== "error" && part.type !== "finish")
+            captured.push(part)
+        }
+        let closed = false
+        const closeStream = () => {
+          if (closed) return
+          closed = true
+          try {
+            controller.close()
+          } catch {}
+        }
+        emit({
           type: "reasoning-start",
           id: reasoningID,
           providerMetadata: { antigravity: { phase: "thinking" } },
         })
 
+        const processEvent = (event: unknown) => {
+          if (!record(event)) return
+          lastEvent = event
+          if (record(event.result) && typeof event.result.error === "string") cliError = event.result.error
+          const tool = toolStep(event)
+          if (tool) {
+            endThinking()
+            const id = `agy-tool-${toolStepIndex(tool)}`
+            const toolName = toolNameOf(tool)
+            const state = typeof tool.state === "string" ? tool.state : "ACTIVE"
+            if (!toolCalls.has(id)) {
+              emit({
+                type: "tool-call",
+                toolCallId: id,
+                toolName,
+                input: toolInputOf(tool),
+                // agy's tool registry is not declared in opencode's streamText
+                // toolset; dynamic + providerExecuted lets the AI SDK pass these
+                // through as opaque executed tools.
+                dynamic: true,
+                providerExecuted: true,
+              })
+              toolCalls.set(id, toolName)
+            }
+            if (state === "DONE" || state === "ERROR") {
+              emit({
+                type: "tool-result",
+                toolCallId: id,
+                toolName,
+                result: toolResultOf(tool),
+                ...(state === "ERROR" ? { isError: true } : {}),
+              })
+              toolCalls.delete(id)
+            }
+            return
+          }
+          const delta = textDelta(event)
+          if (delta) {
+            endThinking()
+            startText()
+            emit({ type: "text-delta", id: "antigravity", delta })
+            sent += delta
+            return
+          }
+          const fallback = textFull(event)
+          if (!fallback) return
+          const value = fallback.startsWith(sent) ? fallback.slice(sent.length) : fallback
+          sent += value
+          if (value) {
+            endThinking()
+            startText()
+            emit({ type: "text-delta", id: "antigravity", delta: value })
+          }
+        }
+
+        const flushLeftover = (event: unknown) => {
+          const value = textFull(event)
+          if (!value) return
+          const delta = value.startsWith(sent) ? value.slice(sent.length) : value
+          sent += delta
+          if (delta) {
+            endThinking()
+            startText()
+            emit({ type: "text-delta", id: "antigravity", delta })
+          }
+        }
+
         const run = async () => {
           try {
+            if (persistent) {
+              const sessionID = meta.sessionID!
+              conversation = await acquireAgyConversation({
+                key: sessionID,
+                binary: AGY,
+                cwd,
+                model: agyModelIDValue,
+                // Variantless models (Claude) have no reasoning-effort knob.
+                effort: VARIANTLESS_MODELS.has(modelID) ? undefined : effort,
+                alwaysProceed: true,
+                conversationID: meta.conversationID,
+                stateDir: meta.stateDir,
+              })
+              const abort = () => {
+                cancelled = true
+                conversation?.cancelActive()
+              }
+              options.abortSignal?.addEventListener("abort", abort, { once: true })
+              const text = lastUserText(options.prompt)
+              const summary = await conversation.turn({
+                text,
+                onEvent: (event) => {
+                  if (!cancelled) processEvent(event)
+                },
+              })
+              options.abortSignal?.removeEventListener("abort", abort)
+              if (cancelled || summary.dropped) {
+                closeStream()
+                return
+              }
+              flushLeftover(summary.event)
+              const usageValue = turnUsage(summary)
+              const metaValue = metadata(summary.event, summary.conversationID || undefined)
+              endThinking()
+              if (textStarted) emit({ type: "text-end", id: "antigravity" })
+              controller.enqueue({
+                type: "finish",
+                usage: usageValue,
+                finishReason: { unified: "stop", raw: "agy" },
+                providerMetadata: metaValue,
+              })
+              if (meta.messageID !== undefined) {
+                completedTurns.set(sessionID, {
+                  userID: meta.messageID,
+                  parts: captured,
+                  usage: usageValue,
+                  metadata: metaValue,
+                })
+              }
+              closeStream()
+              return
+            }
+
+            // Single-shot ephemeral process: OpenCode-internal tasks (title,
+            // summary, compaction, subagents) never touch the user's native agy
+            // conversation. Same structured protocol as before, but the full
+            // OpenCode transcript is replayed into a throwaway conversation.
             child = spawnChild(
               AGY,
               [
@@ -234,21 +477,23 @@ export function createLanguageModel(modelID: string, options: Record<string, unk
                 agyModelIDValue,
                 // Variantless models (Claude) have no reasoning-effort knob.
                 ...(VARIANTLESS_MODELS.has(modelID) ? [] : ["--effort", effort]),
-                // agy runs headless here (no TTY), so any tool that requires a
-                // permission prompt would be auto-denied and the turn would come
-                // back empty. Auto-approve everything so it can read, write, run
-                // commands and browse, mirroring the interactive flow.
                 "--dangerously-skip-permissions",
                 "--print=",
               ],
-              { cwd: process.cwd(), stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
+              { cwd, stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
             )
             if (!child.stdin || !child.stdout || !child.stderr) throw new Error("Could not create agy streams")
-            const abort = () => child?.kill()
+            const abort = () => {
+              cancelled = true
+              child?.kill()
+            }
             options.abortSignal?.addEventListener("abort", abort, { once: true })
-            child.stdin.write(JSON.stringify({ event: "user", message: { content: prompt(options.prompt) } }) + "\n")
+            const payload = JSON.stringify({ event: "user", message: { content: prompt(options.prompt) } })
+            child.stdin.write(payload + "\n")
             child.stdin.end()
 
+            let processOutput = ""
+            let processError = ""
             child.stdout.setEncoding("utf8")
             child.stdout.on("data", (chunk: string) => {
               processOutput += chunk
@@ -256,60 +501,7 @@ export function createLanguageModel(modelID: string, options: Record<string, unk
               processOutput = lines.pop() ?? ""
               for (const line of lines) {
                 try {
-                  const event = JSON.parse(line) as unknown
-                  lastEvent = event
-                  if (record(event) && record(event.result) && typeof event.result.error === "string") {
-                    cliError = event.result.error
-                  }
-                  const tool = toolStep(event)
-                  if (tool) {
-                    endThinking()
-                    const id = `agy-tool-${toolStepIndex(tool)}`
-                    const toolName = toolNameOf(tool)
-                    const state = typeof tool.state === "string" ? tool.state : "ACTIVE"
-                    if (!toolCalls.has(id)) {
-                      controller.enqueue({
-                        type: "tool-call",
-                        toolCallId: id,
-                        toolName,
-                        input: toolInputOf(tool),
-                        // agy's tool registry is not declared in opencode's
-                        // streamText toolset; dynamic + providerExecuted lets the
-                        // AI SDK pass these through as opaque executed tools.
-                        dynamic: true,
-                        providerExecuted: true,
-                      })
-                      toolCalls.set(id, toolName)
-                    }
-                    if (state === "DONE" || state === "ERROR") {
-                      controller.enqueue({
-                        type: "tool-result",
-                        toolCallId: id,
-                        toolName,
-                        result: toolResultOf(tool),
-                        ...(state === "ERROR" ? { isError: true } : {}),
-                      })
-                      toolCalls.delete(id)
-                    }
-                    continue
-                  }
-                  const delta = textDelta(event)
-                  if (delta) {
-                    endThinking()
-                    startText()
-                    controller.enqueue({ type: "text-delta", id: "antigravity", delta })
-                    sent += delta
-                    continue
-                  }
-                  const fallback = textFull(event)
-                  if (!fallback) continue
-                  const value = fallback.startsWith(sent) ? fallback.slice(sent.length) : fallback
-                  sent += value
-                  if (value) {
-                    endThinking()
-                    startText()
-                    controller.enqueue({ type: "text-delta", id: "antigravity", delta: value })
-                  }
+                  processEvent(JSON.parse(line) as unknown)
                 } catch {}
               }
             })
@@ -322,38 +514,41 @@ export function createLanguageModel(modelID: string, options: Record<string, unk
               child!.once("exit", (code) => resolve(code ?? 1))
             })
             options.abortSignal?.removeEventListener("abort", abort)
+            if (cancelled) {
+              closeStream()
+              return
+            }
             if (exitCode !== 0) throw new Error(cliError || processError.trim() || `agy exited with code ${exitCode}`)
             if (processOutput.trim()) {
-              const event = JSON.parse(processOutput) as unknown
-              lastEvent = event
-              const value = textFull(event)
-              if (value) {
-                const delta = value.startsWith(sent) ? value.slice(sent.length) : value
-                sent += delta
-                endThinking()
-                startText()
-                if (delta) controller.enqueue({ type: "text-delta", id: "antigravity", delta })
-              }
+              try {
+                processEvent(JSON.parse(processOutput) as unknown)
+              } catch {}
             }
             endThinking()
-            if (textStarted) controller.enqueue({ type: "text-end", id: "antigravity" })
+            if (textStarted) emit({ type: "text-end", id: "antigravity" })
             controller.enqueue({
               type: "finish",
               usage: usage(lastEvent),
               finishReason: { unified: "stop", raw: "agy" },
               providerMetadata: metadata(lastEvent),
             })
-            controller.close()
+            closeStream()
           } catch (error) {
-            endThinking()
-            controller.enqueue({ type: "error", error })
-            controller.close()
+            if (!cancelled) {
+              endThinking()
+              controller.enqueue({ type: "error", error })
+            }
+            closeStream()
           }
         }
         void run()
       },
       cancel() {
-        child?.kill()
+        cancelled = true
+        conversation?.cancelActive()
+        try {
+          child?.kill()
+        } catch {}
       },
     })
     return { stream }

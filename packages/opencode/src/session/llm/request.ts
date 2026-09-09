@@ -3,6 +3,7 @@ import type { Auth } from "@/auth"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstanceState } from "@/effect/instance-state"
+import { Global } from "@opencode-ai/core/global"
 import { Permission } from "@/permission"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "../message-v2"
@@ -14,6 +15,7 @@ import { Effect, Record } from "effect"
 import { jsonSchema, tool as aiTool, type ModelMessage, type Tool } from "ai"
 import type { Plugin } from "@/plugin"
 import { mergeDeep } from "remeda"
+import path from "node:path"
 
 const USER_AGENT = `opencode/${InstallationVersion}`
 
@@ -89,6 +91,28 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
         providerOptions: input.provider.options,
       })
   const options = mergeOptions(mergeOptions(mergeOptions(base, input.model.options), input.agent.options), variant)
+
+  // Route Antigravity turns: the adapter keeps one native agy conversation per
+  // OpenCode session and needs per-request routing data that never leaves the
+  // process. Internal OpenCode tasks (title, summary, compaction, subagents)
+  // are marked ephemeral so they never pollute the user's agy conversation.
+  if (input.model.providerID === "antigravity") {
+    const conversationID = agyRecoveryConversationID(input.messages)
+    // agy scopes conversations, rules (AGENTS.md) and skills to its cwd, so the
+    // spawned process must run in the exact session workspace directory. The
+    // session mapping sidecar lives under OpenCode's data dir (never agy's
+    // cache, which agy may clean or reorganize).
+    const directory = (yield* InstanceState.context).directory
+    options["opencode"] = {
+      sessionID: input.sessionID,
+      messageID: input.user.id,
+      cwd: directory,
+      stateDir: path.join(Global.Path.data, "antigravity"),
+      ...(conversationID === undefined ? {} : { conversationID }),
+      kind: AGY_INTERNAL_AGENTS.has(input.agent.name) ? "internal" : "main",
+    }
+  }
+
   if (
     input.model.api.npm === "@ai-sdk/azure" &&
     (input.provider.options.useCompletionUrls || input.model.options.useCompletionUrls || options.useCompletionUrls)
@@ -221,6 +245,31 @@ export function hasToolCalls(messages: ModelMessage[]): boolean {
     }
   }
   return false
+}
+
+// OpenCode-internal agents whose prompts never belong in the user's native agy
+// conversation. They run as short-lived, throwaway agy processes instead.
+const AGY_INTERNAL_AGENTS = new Set(["title", "summary", "compaction", "explore", "general"])
+
+// The last assistant part persisted `conversation_id` in its provider metadata
+// (see the antigravity adapter); scan backwards so a restarted OpenCode resumes
+// the exact native agy conversation instead of creating a new one.
+function agyRecoveryConversationID(messages: readonly ModelMessage[]): string | undefined {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index]
+    if (message.role !== "assistant") continue
+    if (!Array.isArray(message.content)) continue
+    for (let partIndex = message.content.length - 1; partIndex >= 0; partIndex--) {
+      const metadata = (message.content[partIndex] as { providerMetadata?: { antigravity?: unknown } }).providerMetadata
+      const value = record(metadata?.antigravity) ? metadata.antigravity.conversation_id : undefined
+      if (typeof value === "string") return value
+    }
+  }
+  return undefined
+}
+
+function record(input: unknown): input is Record<string, unknown> {
+  return typeof input === "object" && input !== null && !Array.isArray(input)
 }
 
 export * as LLMRequestPrep from "./request"
