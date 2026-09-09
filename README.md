@@ -3,46 +3,46 @@
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
       <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
+      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="evairx opencode logo">
     </picture>
   </a>
 </p>
-<p align="center">The open source AI coding agent.</p>
+<p align="center"><b>evairx opencode</b> — a personal fork of the open source AI coding agent.</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+  <a href="https://github.com/evairx/opencode/releases"><img alt="Release" src="https://img.shields.io/badge/release-v1.0a-7c3aed?style=flat-square" /></a>
+  <a href="https://github.com/anomalyco/opencode"><img alt="Upstream" src="https://img.shields.io/badge/upstream-anomalyco%2Fopencode-18181b?style=flat-square" /></a>
 </p>
 
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh.md">简体中文</a> |
-  <a href="README.zht.md">繁體中文</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.it.md">Italiano</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.bs.md">Bosanski</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.no.md">Norsk</a> |
-  <a href="README.br.md">Português (Brasil)</a> |
-  <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a> |
-  <a href="README.uk.md">Українська</a> |
-  <a href="README.bn.md">বাংলা</a> |
-  <a href="README.gr.md">Ελληνικά</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
-</p>
+> [!IMPORTANT]
+> This repository is a **personal fork** created and maintained by [evairx](https://github.com/evairx).
+> It is **not** the official OpenCode repository, nor does it represent official releases, support,
+> or development decisions. The upstream project lives at
+> [anomalyco/opencode](https://github.com/anomalyco/opencode), and every change in this repository
+> is published only on [evairx/opencode](https://github.com/evairx/opencode).
 
-> [!WARNING]
-> **Este repositorio es un fork personal creado por [evairx](https://github.com/evairx).** No es el repositorio oficial de OpenCode ni representa sus releases, soporte o decisiones de desarrollo.
->
-> Este fork existe para mantener integraciones y ajustes personales, entre ellos **Antigravity CLI**, **CommandCode**, cálculo de uso/precios y mejoras de la interfaz TUI. El repositorio oficial es [anomalyco/opencode](https://github.com/anomalyco/opencode). Los cambios de este proyecto se publican únicamente en el fork de [evairx/opencode](https://github.com/evairx/opencode).
+---
+
+## What is this?
+
+A personal `opencode` build tuned for day-to-day agentic work. It adds extra providers, keeps the
+whole terminal workflow intact, and makes the **Antigravity (agy)** provider behave like a first-class
+citizen inside OpenCode.
+
+Highlights:
+
+- **Antigravity (agy)** — Google Gemini and more through the Antigravity CLI, with usage/cost tracking
+  and per-session cost reporting.
+- **Plugin-aware Antigravity** — agy brings its own integrated agent prompt, so OpenCode no longer
+  injects its native system prompt on top. Skills and MCP servers still reach agy:
+  - Name a skill (for example `caveman`) in your message and its instructions are embedded in the
+    prompt automatically, because agy cannot call OpenCode's skill tool.
+  - MCP servers configured in `opencode.json` (for example the `engram` memory server) are mirrored
+    into agy (`agy mcp add`) so agy can execute them inside its own tool loop. Their tool events are
+    rendered in the TUI like any other tool.
+- **Codex (ChatGPT)** — native Codex provider with OAuth and the same usage dialog used by Antigravity.
+- **CommandCode** — an additional model provider.
+- **Usage dialog** — `/usage` and `Ctrl+P` → "Usage model" show plan quotas, buckets and spend.
+- **TUI polish** — provider login popups, usage lander and assorted interface fixes.
 
 [![OpenCode TUI](packages/web/src/assets/lander/screenshot.png)](https://github.com/evairx/opencode/releases)
 
@@ -50,66 +50,74 @@
 
 ---
 
-### Installation
+## Installation
 
-**evairx opencode** is compatible with the original OpenCode: it **replaces** your
-global `opencode` binary and does **not** delete your config files or plugins.
+The installer downloads a **Windows x64** release and replaces your global `opencode` binary at
+`~/.opencode/bin`. Your config files and plugins are preserved — the installer never touches them.
+OpenCode then works exactly as before, but with this fork's providers.
 
-Copy-paste install — Windows **CMD or PowerShell** (one line):
+**One line — PowerShell (CMD or PowerShell):**
 
 ```powershell
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/evairx/opencode/dev/install.ps1 | iex"
 ```
 
-Or download and run it:
+**Or download and run it:**
 
 ```powershell
 curl -fsSL -o install.ps1 https://raw.githubusercontent.com/evairx/opencode/dev/install.ps1
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
-macOS / Linux (curl):
+**macOS / Linux (curl):**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/evairx/opencode/dev/install | bash
 ```
 
-The binary is installed to `~/.opencode/bin` and `opencode` keeps working as usual.
+This fork publishes **Windows x64 binaries**; on macOS/Linux the `install` script points you to the
+correct path. To pick a specific release pass `-Version` (for example `install.ps1 -Version 1.0a`).
+Binaries live under [Releases](https://github.com/evairx/opencode/releases).
+
+> [!NOTE]
+> Building from source is also supported: from `packages/opencode`, run
+> `bun run script/build.ts --single` and copy `dist/opencode-windows-x64/bin/opencode.exe` over
+> `~/.opencode/bin/opencode.exe`.
 
 > [!WARNING]
-> This fork ships its own providers (Antigravity, Codex, CommandCode, ...) and its
-> own usage/credentials handling. When you connect providers on this build, the
-> **previously stored providers and credentials** of the original OpenCode build
-> are **cleaned**. Your config files and plugins are preserved (backups are created
-> when using `-Clean`).
-
-### Agents
-
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
-
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
-
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
-
-Learn more about [agents](https://opencode.ai/docs/agents).
-
-### Documentation
-
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
-
-### Contributing
-
-If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
-
-### Building on OpenCode
-
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
+> This fork ships its own providers (Antigravity, Codex, CommandCode, ...) and its own
+> usage/credentials handling. When you connect a provider on this build, previously stored
+> providers/credentials from the stock OpenCode build are not carried over. Your config files and
+> plugins are always preserved.
 
 ---
 
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+## Agents
+
+Two built-in agents are switchable with the `Tab` key:
+
+- **build** — the default, full-access agent for development work.
+- **plan** — a read-only agent for analysis and code exploration.
+  - Denies file edits by default.
+  - Asks permission before running shell commands.
+  - Ideal for exploring unfamiliar codebases or planning changes.
+
+A **general** subagent is used internally for complex searches and multi-step tasks and can be
+invoked with `@general`.
+
+---
+
+## Documentation
+
+Configuration is the same as upstream OpenCode: see the official [docs](https://opencode.ai/docs).
+
+---
+
+## Contributing
+
+This is a personal fork — pull requests and issues go to [evairx/opencode](https://github.com/evairx/opencode).
+For upstream work, read the upstream [contributing guide](https://github.com/anomalyco/opencode/blob/dev/CONTRIBUTING.md).
+
+---
+
+**Community** — upstream [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
