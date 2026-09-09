@@ -306,11 +306,10 @@ export function DialogProvider(
       {props.children}
 
       <box
+        // This wrapper must stay un-sized while no dialog is open. The app
+        // root owns global selection handling; a full-screen wrapper here
+        // would capture wheel and click events from the session view.
         position="absolute"
-        left={0}
-        top={0}
-        width="100%"
-        height="100%"
         zIndex={3000}
 
         onMouseDown={(

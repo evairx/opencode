@@ -39,6 +39,11 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
+> [!WARNING]
+> **Este repositorio es un fork personal creado por [evairx](https://github.com/evairx).** No es el repositorio oficial de OpenCode ni representa sus releases, soporte o decisiones de desarrollo.
+>
+> Este fork existe para mantener integraciones y ajustes personales, entre ellos **Antigravity CLI**, **CommandCode**, cálculo de uso/precios y mejoras de la interfaz TUI. El repositorio oficial es [anomalyco/opencode](https://github.com/anomalyco/opencode). Los cambios de este proyecto se publican únicamente en el fork de [evairx/opencode](https://github.com/evairx/opencode).
+
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 ---
