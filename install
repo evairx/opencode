@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO="evairx/opencode"
+VERSION="${VERSION:-1.0}"
+BRANCH="${BRANCH:-dev}"
+
+usage() {
+    cat <<EOF
+evairx opencode Installer
+
+Usage: install [options]
+    -v, --version <version>   Install a specific release (default: $VERSION)
+    -h, --help                Show this help
+
+Examples:
+    curl -fsSL https://raw.githubusercontent.com/$REPO/$BRANCH/install | bash
+    curl -fsSL https://raw.githubusercontent.com/$REPO/$BRANCH/install | bash -s -- --version 1.0
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help) usage; exit 0 ;;
+        -v|--version) VERSION="${2:?missing version}"; shift 2 ;;
+        *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+    esac
+done
+
+MUTED='\033[0;2m'
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+raw_os=$(uname -s)
+case "$raw_os" in
+    MINGW*|MSYS*|CYGWIN*) os="windows" ;;
+    Darwin*) os="darwin" ;;
+    Linux*) os="linux" ;;
+    *) os="unknown" ;;
+esac
+
+if [ "$os" = "windows" ]; then
+    echo -e "${GREEN}==>${NC} evairx opencode installer for Windows"
+    echo -e "${MUTED}Delegating to install.ps1 (PowerShell)...${NC}"
+    SCRIPT_URL="https://raw.githubusercontent.com/$REPO/$BRANCH/install.ps1"
+    if command -v powershell.exe >/dev/null 2>&1; then
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "irm '$SCRIPT_URL' | iex"
+    elif command -v pwsh >/dev/null 2>&1; then
+        pwsh -NoProfile -ExecutionPolicy Bypass -Command "irm '$SCRIPT_URL' | iex"
+    else
+        echo -e "${RED}PowerShell is required. Run manually:${NC}"
+        echo "  powershell -ExecutionPolicy Bypass -File install.ps1"
+        exit 1
+    fi
+    exit 0
+fi
+
+echo -e "${RED}This fork currently publishes Windows x64 binaries only.${NC}"
+echo ""
+echo -e "${MUTED}On Windows run:${NC}"
+echo "  powershell -ExecutionPolicy Bypass -c \"irm https://raw.githubusercontent.com/$REPO/$BRANCH/install.ps1 | iex\""
+echo ""
+echo -e "${MUTED}Latest release:${NC} https://github.com/$REPO/releases/latest"
+exit 1
