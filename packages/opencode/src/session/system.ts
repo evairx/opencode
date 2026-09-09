@@ -50,7 +50,8 @@ export function provider(model: Provider.Model) {
 
 export interface Interface {
   readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
-  readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
+  readonly skills: (agent: Agent.Info, opts?: { agy?: boolean }) => Effect.Effect<string | undefined>
+  readonly activeSkills: (agent: Agent.Info, userTexts: readonly string[]) => Effect.Effect<string | undefined>
   readonly mcp: (agent: Agent.Info, permission?: PermissionV1.Ruleset) => Effect.Effect<string | undefined>
 }
 
@@ -102,18 +103,53 @@ const layer = Layer.effect(
         ].filter((part): part is string => part !== undefined)
       }),
 
-      skills: Effect.fn("SystemPrompt.skills")(function* (agent: Agent.Info) {
+      skills: Effect.fn("SystemPrompt.skills")(function* (agent: Agent.Info, opts?: { agy?: boolean }) {
         if (Permission.disabled(["skill"], agent.permission).has("skill")) return
 
         const list = yield* skill.available(agent)
 
+        // Non-native providers (Antigravity/agy) cannot call opencode's skill
+        // tool, so a named skill gets embedded by `activeSkills` instead.
+        const intro = opts?.agy
+          ? "Skills provide specialized instructions. When the user asks for a skill by name, its instructions are embedded in this prompt automatically."
+          : "Skills provide specialized instructions and workflows for specific tasks. Use the skill tool to load a skill when a task matches its description."
+
         return [
-          "Skills provide specialized instructions and workflows for specific tasks.",
-          "Use the skill tool to load a skill when a task matches its description.",
+          intro,
           // the agents seem to ingest the information about skills a bit better if we present a more verbose
           // version of them here and a less verbose version in tool description, rather than vice versa.
           Skill.fmt(list, { verbose: true }),
         ].join("\n")
+      }),
+
+      activeSkills: Effect.fn("SystemPrompt.activeSkills")(function* (agent: Agent.Info, userTexts: readonly string[]) {
+        const list = yield* skill.available(agent)
+        if (list.length === 0) return
+
+        // Non-native providers (Antigravity/agy) run their own tool loop, so
+        // opencode's skill tool never fires. When the user names a skill in
+        // their messages, embed that skill's instructions directly so the
+        // model still applies them (e.g. caveman token trimming).
+        const text = userTexts.join("\n").toLowerCase()
+        const active = list.filter(
+          (item) => item.content !== "" && text.includes(item.name.toLowerCase()),
+        )
+        if (active.length === 0) return
+
+        return [
+          "The following skills were requested; follow their instructions:",
+          ...active.map(
+            (item) =>
+              [
+                `<skill name="${item.name}">`,
+                item.description === undefined ? "" : `  <description>${item.description}</description>`,
+                "  <instructions>",
+                item.content,
+                "  </instructions>",
+                `</skill>`,
+              ].join("\n"),
+          ),
+        ].join("\n\n")
       }),
 
       mcp: Effect.fn("SystemPrompt.mcp")(function* (agent: Agent.Info, permission?: PermissionV1.Ruleset) {

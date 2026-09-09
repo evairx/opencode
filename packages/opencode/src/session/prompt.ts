@@ -1254,18 +1254,40 @@ const layer = Layer.effect(
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-            const [skills, env, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
-              sys.skills(agent),
-              sys.environment(model),
+            // agy brings its own integrated prompt, so opencode's native
+            // prompt context (<env>, references) is not sent to it. Skills the
+            // user names in their messages are embedded directly because agy
+            // cannot call opencode's skill tool.
+            const antigravity = model.providerID === "antigravity"
+
+            const [skills, instructions, mcpInstructions, modelMsgs] = yield* Effect.all([
+              sys.skills(agent, antigravity ? { agy: true } : undefined),
               instruction.system().pipe(Effect.orDie),
               sys.mcp(agent, session.permission),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
+            const env = antigravity ? [] : yield* sys.environment(model)
+            const activeSkills = antigravity
+              ? yield* sys.activeSkills(
+                  agent,
+                  modelMsgs
+                    .filter((message) => message.role === "user")
+                    .slice(-8)
+                    .flatMap((message) => {
+                      if (typeof message.content === "string") return [message.content]
+                      if (!Array.isArray(message.content)) return []
+                      return message.content.flatMap((part) =>
+                        part.type === "text" && typeof part.text === "string" ? [part.text] : [],
+                      )
+                    }),
+                )
+              : undefined
             const system = [
               ...env,
               ...instructions,
               ...(mcpInstructions ? [mcpInstructions] : []),
               ...(skills ? [skills] : []),
+              ...(activeSkills ? [activeSkills] : []),
             ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)

@@ -538,6 +538,51 @@ async function runAgy(args: readonly string[]): Promise<{ raw: string; errOutput
   return { raw: response.join("").trim(), errOutput: errorOutput.join("").trim(), exitCode }
 }
 
+export type AgyMcpServer =
+  | { type: "stdio"; name: string; command: readonly string[]; environment?: Record<string, string> }
+  | { type: "http"; name: string; url: string; headers?: Record<string, string> }
+
+// agy executes MCP servers in its own tool loop, so opencode-registered MCP
+// servers (e.g. engram) need to exist in agy's config to be runnable. `mcp add`
+// is idempotent ("Add or update"), so re-adding the enabled servers is enough;
+// no parsing of `agy mcp list` is needed.
+let agyMcpSyncedAt = 0
+const AGY_MCP_SYNC_INTERVAL_MS = 10 * 60_000
+
+export async function syncAgyMcpServers(
+  servers: readonly AgyMcpServer[],
+  force = false,
+): Promise<{ ok: number; failed: number }> {
+  const summary = { ok: 0, failed: 0 }
+  if (servers.length === 0) return summary
+  if (!force && Date.now() - agyMcpSyncedAt < AGY_MCP_SYNC_INTERVAL_MS) return summary
+
+  for (const server of servers) {
+    const args = ["mcp", "add"]
+    if (server.type === "stdio") {
+      for (const [key, value] of Object.entries(server.environment ?? {})) args.push("--env", `${key}=${value}`)
+      if (server.command.length === 0) continue
+      args.push(server.name)
+      // agy rejects a command starting with "-" unless it follows "--".
+      if (server.command[0].startsWith("-")) args.push("--")
+      args.push(...server.command)
+    } else {
+      for (const [key, value] of Object.entries(server.headers ?? {})) args.push("--header", `${key}: ${value}`)
+      args.push("--type", "http", server.name, server.url)
+    }
+    try {
+      const result = await runAgy([AGY, ...args])
+      if (result.exitCode === 0) summary.ok++
+      else summary.failed++
+    } catch {
+      summary.failed++
+    }
+  }
+
+  agyMcpSyncedAt = Date.now()
+  return summary
+}
+
 export async function beginOAuth(): Promise<OAuthSession> {
   const { spawn } = await import("#pty")
   const env = Object.fromEntries(

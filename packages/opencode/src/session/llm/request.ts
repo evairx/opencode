@@ -55,15 +55,15 @@ const mergeOptions = (target: Record<string, any>, source: Record<string, any> |
 
 export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: PrepareInput) {
   const isOpenaiOauth = input.provider.id === "openai" && input.auth?.type === "oauth"
-  const system = [
-    [
-      ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
-      ...input.system,
-      ...(input.user.system ? [input.user.system] : []),
-    ]
-      .filter((x) => x)
-      .join("\n"),
-  ]
+  // agy (Antigravity) has its own integrated agent prompt; sending opencode's
+  // native default prompt overrides it and wastes tokens. Explicit agent
+  // prompts (custom agents, internal title/summary/compaction) are kept.
+  const nativePrompt =
+    input.agent.prompt ?? (input.model.providerID === "antigravity" ? "" : SystemPrompt.provider(input.model))
+  const joined = [nativePrompt, ...input.system, ...(input.user.system ? [input.user.system] : [])]
+    .filter((x) => x)
+    .join("\n")
+  const system = joined ? [joined] : []
 
   const header = system[0]
   yield* input.plugin.trigger(

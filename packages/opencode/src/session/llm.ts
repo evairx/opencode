@@ -29,6 +29,41 @@ import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
+import { syncAgyMcpServers, type AgyMcpServer } from "@opencode-ai/core/antigravity"
+
+// Translate opencode's configured MCP servers into the shape agy's CLI
+// `mcp add` accepts. Only stdio/http servers with a command/url can be
+// mirrored; disabled servers are skipped.
+function agyMcpServersFromConfig(config: unknown): AgyMcpServer[] {
+  if (!config || typeof config !== "object" || Array.isArray(config)) return []
+  const mcp = (config as Record<string, unknown>).mcp
+  if (!mcp || typeof mcp !== "object" || Array.isArray(mcp)) return []
+
+  const servers: AgyMcpServer[] = []
+  for (const [name, raw] of Object.entries(mcp as Record<string, unknown>)) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue
+    const server = raw as Record<string, unknown>
+    if (server.enabled === false) continue
+
+    const stringsOf = (value: unknown): Record<string, string> => {
+      const result: Record<string, string> = {}
+      if (!value || typeof value !== "object" || Array.isArray(value)) return result
+      for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+        if (typeof entry === "string") result[key] = entry
+      }
+      return result
+    }
+
+    if (server.type === "local") {
+      const command = server.command
+      if (!Array.isArray(command) || command.length === 0 || command.some((item) => typeof item !== "string")) continue
+      servers.push({ type: "stdio", name, command: command as string[], environment: stringsOf(server.environment) })
+    } else if (server.type === "remote" && typeof server.url === "string") {
+      servers.push({ type: "http", name, url: server.url, headers: stringsOf(server.headers) })
+    }
+  }
+  return servers
+}
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
@@ -103,6 +138,16 @@ const live: Layer.Layer<
       )
 
       const isWorkflow = language instanceof GitLabWorkflowLanguageModel
+
+      // agy executes MCP servers (e.g. engram) inside its own loop, but only
+      // when they exist in agy's config. Mirror the enabled servers from
+      // opencode's config over to agy. TTL-cached and idempotent, so this only
+      // spawns agy occasionally and never blocks the turn.
+      if (input.model.providerID === "antigravity") {
+        const servers = agyMcpServersFromConfig(cfg)
+        if (servers.length > 0) void syncAgyMcpServers(servers).catch(() => undefined)
+      }
+
       const prepared = yield* LLMRequestPrep.prepare({
         ...input,
         provider: item,
