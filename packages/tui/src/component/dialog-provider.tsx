@@ -245,6 +245,10 @@ function AutoMethod(props: AutoMethodProps) {
   const toast = useToast()
   const clipboard = useClipboard()
 
+  onMount(() => {
+    if (props.providerID === "codex") void open(props.authorization.url).catch(() => {})
+  })
+
   useBindings(() => ({
     bindings: [
       {

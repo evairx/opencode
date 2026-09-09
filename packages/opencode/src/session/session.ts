@@ -386,12 +386,15 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
       : input.model.cost)
   const totalNanoAiu = input.metadata?.["copilot"]?.["totalNanoAiu"]
   const antigravityCost = input.metadata?.["antigravity"]?.["cost"]
+  const codexCost = input.metadata?.["codex"]?.["cost"]
   return {
     cost:
       typeof totalNanoAiu === "number" && Number.isFinite(totalNanoAiu) && totalNanoAiu >= 0
         ? new Decimal(totalNanoAiu).div(100_000_000_000).toNumber()
         : typeof antigravityCost === "number" && Number.isFinite(antigravityCost) && antigravityCost >= 0
           ? antigravityCost
+        : typeof codexCost === "number" && Number.isFinite(codexCost) && codexCost >= 0
+          ? codexCost
         : safe(
             new Decimal(0)
               .add(new Decimal(tokens.input).mul(finite(costInfo?.input ?? 0)).div(1_000_000))

@@ -12,6 +12,7 @@ import {
   type AgyUsageBucket,
   type AgyUsageGroup,
 } from "@opencode-ai/core/antigravity"
+import { getCodexUsage } from "@opencode-ai/core/codex"
 
 import { useLocal } from "../context/local"
 import { useDialog } from "../ui/dialog"
@@ -63,11 +64,27 @@ function percentWidth(
 
 
 function groupNameFor(
+  providerID: string | undefined,
   modelID: string,
 ): string {
+  if (providerID === "codex") {
+    return "Codex"
+  }
+
   return modelID.startsWith("gemini")
     ? "Gemini Models"
     : "Claude and GPT models"
+}
+
+
+function providerName(
+  providerID: string | undefined,
+): string {
+  if (providerID === "codex") {
+    return "Codex"
+  }
+
+  return "Antigravity"
 }
 
 
@@ -631,11 +648,14 @@ export function DialogUsage() {
 
     try {
       const groups =
-        await getAgyUsage(force)
+        model?.providerID === "codex"
+          ? await getCodexUsage(force)
+          : await getAgyUsage(force)
 
 
       const wantedGroup =
         groupNameFor(
+          model?.providerID,
           model?.modelID ?? "",
         )
 
@@ -650,7 +670,7 @@ export function DialogUsage() {
 
       if (!found) {
         setError(
-          `No Antigravity usage group for ${model?.modelID}`,
+          `No ${providerName(model?.providerID)} usage group for ${model?.modelID}`,
         )
 
         return
@@ -748,7 +768,9 @@ export function DialogUsage() {
           }
           fg={theme.text}
         >
-          Antigravity Usage
+          {providerName(
+            model?.providerID,
+          )} Usage
         </text>
 
         <text
@@ -798,9 +820,13 @@ export function DialogUsage() {
                         theme.textMuted
                       }
                     >
-                      {elapsed() > 15
-                        ? "agy is not answering from inside opencode (check with `agy --print /usage` in a terminal)."
-                        : "Is Antigravity connected? Run /connect and pick Google OAuth."}
+                      {model?.providerID === "codex"
+                        ? elapsed() > 15
+                          ? "Codex is not answering. Check your ChatGPT plan or re-login with /connect."
+                          : "Is Codex connected? Run /connect and pick Codex."
+                        : elapsed() > 15
+                          ? "agy is not answering from inside opencode (check with `agy --print /usage` in a terminal)."
+                          : "Is Antigravity connected? Run /connect and pick Google OAuth."}
                     </text>
                   </box>
                 )}
@@ -811,6 +837,7 @@ export function DialogUsage() {
               titleWidth={
                 (
                   groupNameFor(
+                    model?.providerID,
                     model?.modelID ?? "",
                   ) + " Usage"
                 ).length

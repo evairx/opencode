@@ -1056,6 +1056,9 @@ function ProviderConnection(props: {
     })
 
     onMount(() => {
+      if (props.provider === "codex" && store.authorization?.url) {
+        platform.openExternal(store.authorization.url)
+      }
       const poll = async () => {
         const authorization = store.authorization
         if (!authorization || !alive.value) return

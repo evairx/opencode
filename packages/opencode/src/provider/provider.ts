@@ -32,6 +32,7 @@ import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
 import { COMMANDCODE_BASE_URL, COMMANDCODE_MODELS, COMMANDCODE_VARIANTS } from "@opencode-ai/core/commandcode"
+import { CODEX_BASE_URL, CODEX_MODELS } from "@opencode-ai/core/codex"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 
@@ -201,6 +202,27 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         autoload: true,
         options: {
           baseURL: COMMANDCODE_BASE_URL,
+          ...(token ? { apiKey: token } : {}),
+        },
+      }
+    }),
+    codex: Effect.fnUntraced(function* (input: Info) {
+      const env = yield* dep.env()
+      const auth = yield* dep.auth(input.id)
+      const token =
+        env["CODEX_API_KEY"] ??
+        (auth?.type === "api" ? auth.key : undefined) ??
+        (typeof input.options?.apiKey === "string" ? input.options.apiKey : undefined)
+
+      return {
+        // OAuth credentials are attached by the codex auth plugin loader; the
+        // catalog stays visible before any login so /connect can offer Codex.
+        autoload: true,
+        async getModel(sdk: BundledSDK, modelID: string) {
+          return sdk.responses?.(modelID) ?? sdk.languageModel(modelID)
+        },
+        options: {
+          baseURL: CODEX_BASE_URL,
           ...(token ? { apiKey: token } : {}),
         },
       }
@@ -1555,6 +1577,52 @@ function commandcodeProvider(): Info {
   }
 }
 
+function codexProvider(): Info {
+  const providerID = ProviderV2.ID.make("codex")
+  const model = (def: (typeof CODEX_MODELS)[number]): Model => ({
+    id: ModelV2.ID.make(def.id),
+    providerID,
+    name: def.name,
+    family: def.family ?? "codex",
+    api: { id: def.id, npm: "@ai-sdk/openai", url: CODEX_BASE_URL },
+    status: "active",
+    headers: {},
+    options: {},
+    // List-price estimate per model (USD per 1M tokens). ChatGPT subscription
+    // billing is not per token, but OpenCode shows the estimate like it does
+    // for other providers; /usage also shows the WHAM plan quotas.
+    cost: {
+      input: def.price.input,
+      output: def.price.output,
+      cache: { read: 0, write: 0 },
+    },
+    limit: { context: def.context, input: def.input ?? def.context, output: def.output ?? 65_536 },
+    capabilities: {
+      temperature: false,
+      reasoning: true,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    release_date: "",
+    // Reasoning effort variants (low/medium/high/xhigh) map to the OpenAI
+    // Responses setting through ProviderTransform.providerOptions. Models
+    // without a ladder (Codex Spark) expose no variants.
+    variants: Object.fromEntries((def.variants ?? []).map((effort) => [effort, { reasoningEffort: effort }])),
+  })
+
+  return {
+    id: providerID,
+    name: "Codex",
+    source: "custom",
+    env: ["CODEX_API_KEY"],
+    options: { baseURL: CODEX_BASE_URL },
+    models: Object.fromEntries(CODEX_MODELS.map((item) => [item.id, model(item)])),
+  }
+}
+
 function modeOptions(model: Model, body: Record<string, unknown> | undefined) {
   if (!body) return model.options
   const options = Object.fromEntries(
@@ -1616,6 +1684,8 @@ const layer = Layer.effect(
         catalog[antigravity.id] = antigravity
         const commandcode = commandcodeProvider()
         catalog[commandcode.id] = commandcode
+        const codex = codexProvider()
+        catalog[codex.id] = codex
         const database = mapValues(catalog, toPublicInfo)
 
         const providers: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>

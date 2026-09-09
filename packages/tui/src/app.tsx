@@ -955,14 +955,20 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
       },
       {
-        name: "antigravity.usage",
+        name: "usage.model",
         title: "Usage model",
-        category: "Antigravity",
+        category: "Model",
         slashName: "usage",
-        // Only meaningful while an Antigravity model is active; hide it
-        // otherwise so /usage and Ctrl+P stay clean.
-        enabled: () => local.model.current()?.providerID === "antigravity",
-        suggested: () => local.model.current()?.providerID === "antigravity",
+        // Only meaningful while a quota-based model (Antigravity or Codex) is
+        // active; hide it otherwise so /usage and Ctrl+P stay clean.
+        enabled: () => {
+          const providerID = local.model.current()?.providerID
+          return providerID === "antigravity" || providerID === "codex"
+        },
+        suggested: () => {
+          const providerID = local.model.current()?.providerID
+          return providerID === "antigravity" || providerID === "codex"
+        },
         run: () => {
           dialog.replace(() => <DialogUsage />)
         },

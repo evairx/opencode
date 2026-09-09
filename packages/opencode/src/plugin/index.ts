@@ -23,6 +23,7 @@ import { XaiAuthPlugin } from "./xai"
 import { CerebrasPlugin } from "./cerebras"
 import { AntigravityAuthPlugin } from "./antigravity"
 import { CommandCodeAuthPlugin } from "./commandcode"
+import { CodexProviderAuthPlugin } from "./codex"
 import { SnowflakeCortexAuthPlugin } from "./snowflake-cortex"
 import { Effect, Layer, Context } from "effect"
 import { EffectBridge } from "@/effect/bridge"
@@ -86,6 +87,7 @@ function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
     CerebrasPlugin,
     AntigravityAuthPlugin,
     CommandCodeAuthPlugin,
+    CodexProviderAuthPlugin,
   ]
 }
 
