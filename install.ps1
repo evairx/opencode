@@ -60,14 +60,15 @@ function Test-OpencodeRunning {
 function Add-ToUserPath([string]$dir) {
     if ($NoModifyPath -or $SkipPath) { return }
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $separator = if ($userPath) { ";$dir" } else { $dir }
     $needle = ($userPath + ";").ToLowerInvariant()
     if ($needle.Contains($dir.ToLowerInvariant() + ";")) {
         Write-Info "PATH already contains $dir"
         return
     }
-    [Environment]::SetEnvironmentVariable("Path", $userPath + $separator, "User")
-    Write-Info "Added $dir to your user PATH (new terminals only)."
+    # Prepend so this install wins over any other opencode (npm, scoop, choco).
+    $newPath = if ($userPath) { "$dir;$userPath" } else { $dir }
+    [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+    Write-Info "Prepended $dir to your user PATH (new terminals only)."
 }
 
 # ------------------------------------------------------------------ backup
