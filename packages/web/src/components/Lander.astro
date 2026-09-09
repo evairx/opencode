@@ -5,9 +5,7 @@ import config from "virtual:starlight/user-config";
 
 import CopyIcon from "../assets/lander/copy.svg";
 import CheckIcon from "../assets/lander/check.svg";
-import TuiScreenshot from "../assets/lander/screenshot-splash.png";
-import VscodeScreenshot from "../assets/lander/screenshot-vscode.png";
-import GithubScreenshot from "../assets/lander/screenshot-github.png";
+import TuiScreenshot from "../assets/lander/screenshot.png";
 
 const { data } = Astro.locals.starlightRoute.entry;
 const { title = data.title, tagline, image, actions = [] } = data.hero || {};
@@ -25,8 +23,6 @@ const locale = Astro.currentLocale || 'root';
 const t = Astro.locals.t as (key: string) => string;
 const docsHref = getRelativeLocaleUrl(locale, "")
 const docsCliHref = getRelativeLocaleUrl(locale, "cli")
-const docsIdeHref = getRelativeLocaleUrl(locale, "ide")
-const docsGithubHref = getRelativeLocaleUrl(locale, "github")
 
 const command = "curl -fsSL"
 const protocol = "https://"
@@ -162,24 +158,6 @@ if (image) {
             <Image src={TuiScreenshot} alt={t('app.lander.images.tui.alt')} />
           </a>
         </figure>
-      </div>
-      <div class="right">
-        <div class="row1">
-          <figure>
-            <figcaption>{t('app.lander.images.vscode.caption')}</figcaption>
-            <a href={docsIdeHref}>
-              <Image src={VscodeScreenshot} alt={t('app.lander.images.vscode.alt')} />
-            </a>
-          </figure>
-        </div>
-        <div class="row2">
-          <figure>
-            <figcaption>{t('app.lander.images.github.caption')}</figcaption>
-            <a href={docsGithubHref}>
-              <Image src={GithubScreenshot} alt={t('app.lander.images.github.alt')} />
-            </a>
-          </figure>
-        </div>
       </div>
     </section>
 
@@ -358,7 +336,7 @@ section.content {
 section.images {
   --images-height: 600px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   grid-template-rows: var(--images-height);
   border-top: 2px solid var(--sl-color-border);
 

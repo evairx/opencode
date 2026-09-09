@@ -44,7 +44,7 @@
 >
 > Este fork existe para mantener integraciones y ajustes personales, entre ellos **Antigravity CLI**, **CommandCode**, cálculo de uso/precios y mejoras de la interfaz TUI. El repositorio oficial es [anomalyco/opencode](https://github.com/anomalyco/opencode). Los cambios de este proyecto se publican únicamente en el fork de [evairx/opencode](https://github.com/evairx/opencode).
 
-[![OpenCode TUI](packages/web/src/assets/lander/screenshot-splash.png)](https://github.com/evairx/opencode/releases)
+[![OpenCode TUI](packages/web/src/assets/lander/screenshot.png)](https://github.com/evairx/opencode/releases)
 
 [![OpenCode usage](packages/web/src/assets/lander/screenshot-usage.png)](https://github.com/evairx/opencode/releases)
 
