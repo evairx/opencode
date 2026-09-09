@@ -9,7 +9,7 @@
 </p>
 <p align="center"><b>evairx opencode</b> — a personal fork of the open source AI coding agent.</p>
 <p align="center">
-  <a href="https://github.com/evairx/opencode/releases"><img alt="Release" src="https://img.shields.io/badge/release-v1.0a-7c3aed?style=flat-square" /></a>
+  <a href="https://github.com/evairx/opencode/releases"><img alt="Release" src="https://img.shields.io/badge/release-v1.0b-7c3aed?style=flat-square" /></a>
   <a href="https://github.com/anomalyco/opencode"><img alt="Upstream" src="https://img.shields.io/badge/upstream-anomalyco%2Fopencode-18181b?style=flat-square" /></a>
 </p>
 
@@ -44,6 +44,16 @@ Highlights:
 - **Usage dialog** — `/usage` and `Ctrl+P` → "Usage model" show plan quotas, buckets and spend.
 - **TUI polish** — provider login popups, usage lander and assorted interface fixes.
 
+> [!WARNING]
+> The Antigravity integration shells out to the official `agy` CLI and uses only its
+> documented `stream-json` protocol, with authentication owned by the `agy` keyring.
+> That does **not** make it compliant with Google's consumer Terms of Service: the
+> current Antigravity FAQ explicitly names third-party coding agents (including
+> OpenCode) as unsupported with an Antigravity product login. For a third-party
+> agent Google's recommended path is an API key through Vertex AI / AI Studio.
+> Use at your own risk; this build does not evade detection, alter telemetry, or
+> reuse extracted OAuth tokens.
+
 [![OpenCode TUI](packages/web/src/assets/lander/screenshot.png)](https://github.com/evairx/opencode/releases)
 
 [![OpenCode usage](packages/web/src/assets/lander/screenshot-usage.png)](https://github.com/evairx/opencode/releases)
@@ -55,6 +65,10 @@ Highlights:
 The installer downloads a **Windows x64** release and replaces your global `opencode` binary at
 `~/.opencode/bin`. Your config files and plugins are preserved — the installer never touches them.
 OpenCode then works exactly as before, but with this fork's providers.
+
+**Plain `install.ps1` always installs the latest release** — no `-Version` needed. Pass
+`-Version <x>` (for example `install.ps1 -Version 1.0b`) to pin a specific release, and `-Force` to
+reinstall over a running/newer install.
 
 **One line — PowerShell (CMD or PowerShell):**
 
@@ -76,8 +90,7 @@ curl -fsSL https://raw.githubusercontent.com/evairx/opencode/dev/install | bash
 ```
 
 This fork publishes **Windows x64 binaries**; on macOS/Linux the `install` script points you to the
-correct path. To pick a specific release pass `-Version` (for example `install.ps1 -Version 1.0a`).
-Binaries live under [Releases](https://github.com/evairx/opencode/releases).
+correct path. Binaries live under [Releases](https://github.com/evairx/opencode/releases).
 
 > [!NOTE]
 > Building from source is also supported: from `packages/opencode`, run

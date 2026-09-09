@@ -2,14 +2,17 @@
 .SYNOPSIS
     evairx opencode installer (Windows).
 .DESCRIPTION
-    Installs the evairx opencode fork (build 1.0 / identity evairx-1.0) as the
-    global `opencode`.
+    Installs the latest evairx opencode fork release as the global `opencode`.
 
     Default (replace-only):
-      1. Detects an already installed opencode.
-      2. Replaces the global binary with this build at ~\.opencode\bin.
-      3. Makes sure ~\.opencode\bin is first on the user PATH.
+      1. Detects the latest published release (tag vX from GitHub).
+      2. Detects an already installed opencode.
+      3. Replaces the global binary with that release at ~\.opencode\bin.
+      4. Makes sure ~\.opencode\bin is first on the user PATH.
       Your config files and plugins are NOT touched.
+
+    Pinning a version (-Version, e.g. "1.0b") overrides the auto-detected
+    latest release.
 
     Optional cleanup (-Clean):
       Backs up the whole opencode config/data folders to
@@ -22,12 +25,15 @@
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File install.ps1
 .EXAMPLE
+    powershell -ExecutionPolicy Bypass -File install.ps1 -Version 1.0b
+.EXAMPLE
     powershell -ExecutionPolicy Bypass -File install.ps1 -Force
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File install.ps1 -Clean
 #>
 param(
-    [string]$Version = "1.0",
+    # Empty by default = install the latest GitHub release. Pass e.g. "1.0b" to pin.
+    [string]$Version = "",
     [string]$Repo = "evairx/opencode",
     [switch]$Force,
     [switch]$Clean,
@@ -38,10 +44,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$IDENTITY = "evairx-1.0"
 $INSTALL_DIR = Join-Path $HOME ".opencode\bin"
 $ASSET = "opencode-windows-x64.zip"
-$URL = "https://github.com/$Repo/releases/download/v$Version/$ASSET"
 
 $MUTED = "$([char]0x1b)[2m"
 $GREEN = "$([char]0x1b)[32m"
@@ -60,6 +64,19 @@ function Get-CurrentOpenCode {
 
 function Test-OpencodeRunning {
     return @(Get-Process -Name "opencode" -ErrorAction SilentlyContinue).Count -gt 0
+}
+
+# Queries the GitHub API for the newest non-prerelease tag (without the v).
+function Resolve-LatestVersion {
+    try {
+        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" -Headers @{ "User-Agent" = "evairx-installer" }
+        if ($release.tag_name) {
+            return ($release.tag_name -replace '^v', '')
+        }
+    } catch {
+        # fall through to the -Version pin below
+    }
+    return $null
 }
 
 function Add-ToUserPath([string]$dir) {
@@ -167,13 +184,30 @@ function Install-Binary {
 $configDir = Join-Path $HOME ".config\opencode"
 $dataDir = Join-Path $HOME ".local\share\opencode"
 
+# Resolve the version to install: explicit -Version wins, otherwise the latest
+# published release. Plain `install.ps1` therefore always installs the newest.
+if ($Version) {
+    $Version = $Version.TrimStart("v")
+} else {
+    $latest = Resolve-LatestVersion
+    if ($latest) {
+        Write-Info "Detected latest release: v$latest"
+        $Version = $latest.TrimStart("v")
+    } else {
+        Write-Warn "Could not detect the latest release. Pass -Version (e.g. -Version 1.0b)."
+        exit 1
+    }
+}
+$IDENTITY = "evairx-$Version"
+$URL = "https://github.com/$Repo/releases/download/v$Version/$ASSET"
+
 $installed = Get-CurrentOpenCode
 if ($installed) {
     Write-Step "Found an existing opencode: $($installed.Source)"
     if (-not $Force -and (Test-Path -LiteralPath (Join-Path $INSTALL_DIR "opencode.exe"))) {
         $current = (& (Join-Path $INSTALL_DIR "opencode.exe") --version 2>$null).Trim()
         if ($current -eq $IDENTITY) {
-            Write-Info "evairx-1.0 is already installed. Use -Force to reinstall."
+            Write-Info "$IDENTITY is already installed. Use -Force to reinstall."
             exit 0
         }
     }
@@ -197,5 +231,5 @@ Add-ToUserPath $INSTALL_DIR
 
 Write-Host ""
 Write-Host "${GREEN}evairx opencode installed.${NC}"
-Write-Host "${MUTED}Run 'opencode' in a new terminal to start. Version: evairx-1.0${NC}"
+Write-Host "${MUTED}Run 'opencode' in a new terminal to start. Version: $IDENTITY${NC}"
 Write-Host ""
