@@ -24,7 +24,7 @@ export const UpgradeCommand = {
     UI.println(UI.logo("  "))
     UI.empty()
     prompts.intro("Upgrade")
-    prompts.log.info("Updates are disabled in evairx-1.0.")
+    prompts.log.info("Updates are disabled in this pinned fork.")
     prompts.outro("Done")
   },
 }
