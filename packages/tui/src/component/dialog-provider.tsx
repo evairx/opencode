@@ -1,19 +1,21 @@
-import { createMemo, createSignal, onMount, Show } from "solid-js"
+import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useSync } from "../context/sync"
 import { map, pipe, sortBy } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { useSDK } from "../context/sdk"
 import { DialogPrompt } from "../ui/dialog-prompt"
+import { Spinner } from "./spinner"
 import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
-import { TextAttributes } from "@opentui/core"
+import { TextAttributes, type TextareaRenderable } from "@opentui/core"
+import { useTuiConfig } from "../config"
+import { useBindings, useCommandShortcut } from "../keymap"
 import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
 import { useToast } from "../ui/toast"
 import { isConsoleManagedProvider } from "../util/provider-origin"
 import { useConnected } from "./use-connected"
-import { useBindings } from "../keymap"
 import { useClipboard } from "../context/clipboard"
 import open from "open"
 
@@ -197,9 +199,18 @@ export function createDialogProviderOptions() {
                 return
               }
               if (result.data?.method === "code") {
-                dialog.replace(() => (
-                  <CodeMethod providerID={providerID} title={method.label} index={index} authorization={result.data!} />
-                ))
+                dialog.replace(() =>
+                  providerID === "antigravity" ? (
+                    <AntigravityCodeMethod
+                      providerID={providerID}
+                      title={method.label}
+                      index={index}
+                      authorization={result.data!}
+                    />
+                  ) : (
+                    <CodeMethod providerID={providerID} title={method.label} index={index} authorization={result.data!} />
+                  ),
+                )
               }
               if (result.data?.method === "auto") {
                 dialog.replace(() => (
@@ -355,6 +366,182 @@ function CodeMethod(props: CodeMethodProps) {
         </box>
       )}
     />
+  )
+}
+
+const ANTIGRAVITY_OPEN_BROWSER_DELAY_MS = 6000
+
+function AntigravityCodeMethod(props: CodeMethodProps & { afterConnected?: () => void }) {
+  const dialog = useDialog()
+  const { theme } = useTheme()
+  const tuiConfig = useTuiConfig()
+  const sdk = useSDK()
+  const sync = useSync()
+  const submitShortcut = useCommandShortcut("dialog.prompt.submit")
+  const [ready, setReady] = createSignal(false)
+  const [error, setError] = createSignal(false)
+  const [textareaTarget, setTextareaTarget] = createSignal<TextareaRenderable>()
+  let textarea: TextareaRenderable
+  let openTimer: ReturnType<typeof setTimeout> | undefined
+
+  function submit() {
+    if (!ready() || !textarea || textarea.isDestroyed) return
+    void confirmCode(textarea.plainText)
+  }
+
+  async function confirmCode(value: string) {
+    if (!value.trim()) return
+    const { error } = await sdk.client.provider.oauth.callback({
+      providerID: props.providerID,
+      method: props.index,
+      code: value.trim(),
+    })
+    if (!error) {
+      await sdk.client.instance.dispose()
+      await sync.bootstrap()
+      if (props.afterConnected) {
+        props.afterConnected()
+        return
+      }
+      dialog.replace(() => <DialogModel providerID={props.providerID} />)
+      return
+    }
+    setError(true)
+  }
+
+  useBindings(() => ({
+    target: textareaTarget,
+    enabled: textareaTarget() !== undefined && ready(),
+    priority: 1,
+    commands: [
+      {
+        name: "dialog.prompt.submit",
+        title: "Submit dialog prompt",
+        category: "Dialog",
+        run: submit,
+      },
+    ],
+    bindings: tuiConfig.keybinds.gather("dialog.prompt", ["dialog.prompt.submit"]),
+  }))
+
+  onMount(() => {
+    dialog.setSize("medium")
+    // OpenCode opens the Google login page automatically. Keep a short loading
+    // state while it boots so the dialog reads as one flow, then reveal the
+    // code field. "Open Browser" stays available to reopen it manually.
+    void open(props.authorization.url).catch(() => {})
+    openTimer = setTimeout(() => {
+      setReady(true)
+      setTimeout(() => {
+        if (!textarea || textarea.isDestroyed) return
+        textarea.focus()
+        textarea.gotoLineEnd()
+      }, 1)
+    }, ANTIGRAVITY_OPEN_BROWSER_DELAY_MS)
+  })
+
+  onCleanup(() => clearTimeout(openTimer))
+
+  return (
+    <box paddingLeft={2} paddingRight={2} gap={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+          {props.title}
+        </text>
+        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+          esc
+        </text>
+      </box>
+
+      <Show
+        when={ready()}
+        fallback={
+          <box flexDirection="column" gap={1} paddingTop={1}>
+            <Spinner color={theme.primary}>Opening browser…</Spinner>
+            <text fg={theme.textMuted}>
+              OpenCode is opening the Google login page. If it does not open automatically, use Open Browser below.
+            </text>
+          </box>
+        }
+      >
+        <box flexDirection="column" gap={1} paddingTop={1}>
+          <textarea
+            height={3}
+            ref={(val: TextareaRenderable) => {
+              textarea = val
+              setTextareaTarget(val)
+            }}
+            placeholder="Authorization code"
+            placeholderColor={theme.textMuted}
+            textColor={theme.text}
+            focusedTextColor={theme.text}
+            cursorColor={theme.text}
+            cursorStyle={tuiConfig.cursor}
+          />
+          <Show when={error()}>
+            <text fg={theme.error}>Invalid code</text>
+          </Show>
+          <text fg={theme.textMuted}>{props.authorization.instructions}</text>
+        </box>
+      </Show>
+
+      <box paddingBottom={1} gap={2} flexDirection="row">
+        <Link href={props.authorization.url} fg={theme.primary}>
+          Open Browser
+        </Link>
+        <Show when={ready() && submitShortcut()}>
+          <text fg={theme.text}>
+            {submitShortcut()} <span style={{ fg: theme.textMuted }}>submit</span>
+          </text>
+        </Show>
+      </box>
+    </box>
+  )
+}
+
+/**
+ * Direct Antigravity connect flow, used when an action (like /usage) discovers
+ * that Antigravity is not authenticated yet. It opens the same code popup as
+ * /connect and runs `onConnected` once the login completes.
+ */
+export function AntigravityConnect(props: { onConnected?: () => void }) {
+  const dialog = useDialog()
+  const { theme } = useTheme()
+  const sdk = useSDK()
+  const toast = useToast()
+  const [authorization, setAuthorization] = createSignal<ProviderAuthAuthorization>()
+
+  onMount(async () => {
+    const result = await sdk.client.provider.oauth.authorize({ providerID: "antigravity", method: 0 })
+    if (result.error) {
+      toast.show({ variant: "error", message: JSON.stringify(result.error) })
+      dialog.clear()
+      return
+    }
+    if (result.data?.method !== "code") {
+      dialog.clear()
+      return
+    }
+    setAuthorization(result.data)
+  })
+
+  return (
+    <Show
+      when={authorization()}
+      fallback={
+        <box paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1}>
+          <Spinner color={theme.primary}>Connecting Antigravity…</Spinner>
+        </box>
+      }
+    >
+      <AntigravityCodeMethod
+        providerID="antigravity"
+        title="Connect Antigravity"
+        index={0}
+        authorization={authorization()!}
+        afterConnected={props.onConnected}
+      />
+    </Show>
   )
 }
 

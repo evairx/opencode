@@ -15,9 +15,27 @@ import {
 import { getCodexUsage } from "@opencode-ai/core/codex"
 
 import { useLocal } from "../context/local"
+import { useSync } from "../context/sync"
 import { useDialog } from "../ui/dialog"
 import { useTheme } from "../context/theme"
 import { useBindings } from "../keymap"
+import { AntigravityConnect } from "./dialog-provider"
+
+
+// ============================================================
+// Antigravity auth detection
+// ============================================================
+
+const ANTIGRAVITY_AUTH_REQUIRED_RE =
+  /(authentication required|authorization required|please visit the url to log in|accounts\.google\.com)/i
+
+function isAntigravityAuthRequired(
+  message: string,
+): boolean {
+  return ANTIGRAVITY_AUTH_REQUIRED_RE.test(
+    message,
+  )
+}
 
 
 // ============================================================
@@ -597,6 +615,9 @@ export function DialogUsage() {
   const dialog =
     useDialog()
 
+  const sync =
+    useSync()
+
 
   const [loading, setLoading] =
     createSignal(true)
@@ -680,11 +701,29 @@ export function DialogUsage() {
       setGroup(found)
     }
     catch (cause) {
-      setError(
+      const message =
         cause instanceof Error
           ? cause.message
-          : String(cause),
-      )
+          : String(cause)
+
+      // Antigravity's CLI printed a login prompt instead of usage data:
+      // stop showing a stuck usage popup and switch to the connect popup.
+      // Once connected, the usage popup opens again automatically.
+      if (
+        model?.providerID === "antigravity" &&
+        isAntigravityAuthRequired(message)
+      ) {
+        dialog.replace(() => (
+          <AntigravityConnect
+            onConnected={() =>
+              dialog.replace(() => <DialogUsage />)
+            }
+          />
+        ))
+        return
+      }
+
+      setError(message)
     }
     finally {
       if (timer) {
@@ -703,6 +742,24 @@ export function DialogUsage() {
 
   onMount(() => {
     dialog.setSizeSmall()
+
+    // Antigravity keeps its session outside opencode (agy keyring). If no
+    // credential is saved yet, running the usage CLI would just stall on a
+    // login prompt. Go straight to the connect popup instead of a stuck
+    // loading dialog, and reopen usage once the login finishes.
+    if (
+      model?.providerID === "antigravity" &&
+      !sync.data.provider_next.connected.includes("antigravity")
+    ) {
+      dialog.replace(() => (
+        <AntigravityConnect
+          onConnected={() =>
+            dialog.replace(() => <DialogUsage />)
+          }
+        />
+      ))
+      return
+    }
 
     void fetchUsage()
   })
