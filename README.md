@@ -44,7 +44,9 @@
 >
 > Este fork existe para mantener integraciones y ajustes personales, entre ellos **Antigravity CLI**, **CommandCode**, cálculo de uso/precios y mejoras de la interfaz TUI. El repositorio oficial es [anomalyco/opencode](https://github.com/anomalyco/opencode). Los cambios de este proyecto se publican únicamente en el fork de [evairx/opencode](https://github.com/evairx/opencode).
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://github.com/evairx/opencode/releases)
+[![OpenCode TUI](packages/web/src/assets/lander/screenshot-splash.png)](https://github.com/evairx/opencode/releases)
+
+[![OpenCode usage](packages/web/src/assets/lander/screenshot-usage.png)](https://github.com/evairx/opencode/releases)
 
 ---
 
@@ -80,10 +82,6 @@ The binary is installed to `~/.opencode/bin` and `opencode` keeps working as usu
 > **previously stored providers and credentials** of the original OpenCode build
 > are **cleaned**. Your config files and plugins are preserved (backups are created
 > when using `-Clean`).
-
-### Usage
-
-![OpenCode usage and model quotas](packages/web/src/assets/lander/screenshot-usage.png)
 
 ### Agents
 
