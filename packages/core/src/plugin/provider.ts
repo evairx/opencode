@@ -1,5 +1,6 @@
 import { AlibabaPlugin } from "./provider/alibaba"
 import { AntigravityPlugin } from "./provider/antigravity"
+import { CommandCodePlugin } from "./provider/commandcode"
 import { AmazonBedrockPlugin } from "./provider/amazon-bedrock"
 import { AnthropicPlugin } from "./provider/anthropic"
 import { AzureCognitiveServicesPlugin, AzurePlugin } from "./provider/azure"
@@ -37,6 +38,7 @@ import type { Scope } from "effect"
 export const ProviderPlugins: PluginInternal.Plugin<PluginInternal.Requirements | Scope.Scope>[] = [
   AlibabaPlugin,
   AntigravityPlugin,
+  CommandCodePlugin,
   AmazonBedrockPlugin,
   AnthropicPlugin,
   AzureCognitiveServicesPlugin,

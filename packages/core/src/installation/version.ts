@@ -3,6 +3,8 @@ declare global {
   const OPENCODE_CHANNEL: string
 }
 
-export const InstallationVersion = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
-export const InstallationChannel = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "local"
-export const InstallationLocal = InstallationChannel === "local"
+// This fork is intentionally pinned. Keep the identity independent from the
+// upstream build metadata so a bundled binary cannot silently rejoin updates.
+export const InstallationVersion = "evairx-1.0"
+export const InstallationChannel: string = "local"
+export const InstallationLocal = true

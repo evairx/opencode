@@ -31,6 +31,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { COMMANDCODE_BASE_URL, COMMANDCODE_MODELS, COMMANDCODE_VARIANTS } from "@opencode-ai/core/commandcode"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 
@@ -186,6 +187,24 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           return sdk.languageModel(modelID)
         },
       }),
+    commandcode: Effect.fnUntraced(function* (input: Info) {
+      const env = yield* dep.env()
+      const auth = yield* dep.auth(input.id)
+      const token =
+        env["CMD_API_KEY"] ??
+        (auth?.type === "api" ? auth.key : undefined) ??
+        (typeof input.options?.apiKey === "string" ? input.options.apiKey : undefined)
+
+      return {
+        // Keep the catalog visible in /connect before the first key is saved,
+        // just like Antigravity. The request itself still requires a token.
+        autoload: true,
+        options: {
+          baseURL: COMMANDCODE_BASE_URL,
+          ...(token ? { apiKey: token } : {}),
+        },
+      }
+    }),
     anthropic: () =>
       Effect.succeed({
         autoload: false,
@@ -1496,6 +1515,46 @@ function antigravityProvider(): Info {
   }
 }
 
+function commandcodeProvider(): Info {
+  const providerID = ProviderV2.ID.make("commandcode")
+  const model = (input: (typeof COMMANDCODE_MODELS)[number]): Model => ({
+    id: ModelV2.ID.make(input.id),
+    providerID,
+    name: input.name,
+    family: input.family,
+    api: { id: input.id, npm: "@ai-sdk/openai-compatible", url: COMMANDCODE_BASE_URL },
+    status: "active",
+    headers: {},
+    options: {},
+    cost: {
+      input: input.input,
+      output: input.output,
+      cache: { read: input.cacheRead, write: input.cacheWrite },
+    },
+    limit: { context: input.context, input: input.context, output: 65_536 },
+    capabilities: {
+      temperature: true,
+      reasoning: true,
+      attachment: Boolean(input.image),
+      toolcall: true,
+      input: { text: true, audio: false, image: Boolean(input.image), video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    release_date: "",
+    variants: Object.fromEntries(Object.entries(COMMANDCODE_VARIANTS).map(([id, body]) => [id, { ...body }])),
+  })
+
+  return {
+    id: providerID,
+    name: "CommandCode",
+    source: "custom",
+    env: ["CMD_API_KEY"],
+    options: { baseURL: COMMANDCODE_BASE_URL },
+    models: Object.fromEntries(COMMANDCODE_MODELS.map((item) => [item.id, model(item)])),
+  }
+}
+
 function modeOptions(model: Model, body: Record<string, unknown> | undefined) {
   if (!body) return model.options
   const options = Object.fromEntries(
@@ -1555,6 +1614,8 @@ const layer = Layer.effect(
         const catalog = mapValues(modelsDev, fromModelsDevProvider)
         const antigravity = antigravityProvider()
         catalog[antigravity.id] = antigravity
+        const commandcode = commandcodeProvider()
+        catalog[commandcode.id] = commandcode
         const database = mapValues(catalog, toPublicInfo)
 
         const providers: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>

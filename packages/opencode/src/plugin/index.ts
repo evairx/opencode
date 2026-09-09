@@ -22,6 +22,7 @@ import { DigitalOceanAuthPlugin } from "./digitalocean"
 import { XaiAuthPlugin } from "./xai"
 import { CerebrasPlugin } from "./cerebras"
 import { AntigravityAuthPlugin } from "./antigravity"
+import { CommandCodeAuthPlugin } from "./commandcode"
 import { SnowflakeCortexAuthPlugin } from "./snowflake-cortex"
 import { Effect, Layer, Context } from "effect"
 import { EffectBridge } from "@/effect/bridge"
@@ -84,6 +85,7 @@ function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
     XaiAuthPlugin,
     CerebrasPlugin,
     AntigravityAuthPlugin,
+    CommandCodeAuthPlugin,
   ]
 }
 
