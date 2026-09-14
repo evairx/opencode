@@ -37,7 +37,10 @@ export const CommandCodePlugin = define({
           model.api = {
             id: def.id,
             type: "aisdk",
-            package: "@ai-sdk/openai-compatible",
+            // Claude models are only served from the Anthropic Messages
+            // endpoint; the native runtime picks that protocol from the package
+            // name instead of the OpenAI-compatible chat route.
+            package: def.anthropic ? "@ai-sdk/anthropic" : "@ai-sdk/openai-compatible",
             url: COMMANDCODE_BASE_URL,
           }
           model.capabilities = {
@@ -55,15 +58,23 @@ export const CommandCodePlugin = define({
           model.limit = { context: def.context, input: def.context, output: 65_536 }
           model.status = "active"
           model.enabled = true
-          model.variants = Object.entries(COMMANDCODE_VARIANTS).map(([id, body]) => ({
-            id: ModelV2.VariantID.make(id),
-            headers: {},
-            // V2 variants are raw request-body fields. The legacy provider
-            // path uses the AI SDK's camelCase option name instead.
-            body: Object.fromEntries(
-              Object.entries(body).map(([key, value]) => [key === "reasoningEffort" ? "reasoning_effort" : key, value]),
-            ),
-          }))
+          // Anthropic Messages variants use thinking/effort fields, not the
+          // OpenAI-style reasoning_effort body field, so leave those models
+          // without explicit variants.
+          model.variants = def.anthropic
+            ? []
+            : Object.entries(COMMANDCODE_VARIANTS).map(([id, body]) => ({
+                id: ModelV2.VariantID.make(id),
+                headers: {},
+                // V2 variants are raw request-body fields. The legacy provider
+                // path uses the AI SDK's camelCase option name instead.
+                body: Object.fromEntries(
+                  Object.entries(body).map(([key, value]) => [
+                    key === "reasoningEffort" ? "reasoning_effort" : key,
+                    value,
+                  ]),
+                ),
+              }))
         })
       }
     })

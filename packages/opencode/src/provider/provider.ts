@@ -1544,7 +1544,12 @@ function commandcodeProvider(): Info {
     providerID,
     name: input.name,
     family: input.family,
-    api: { id: input.id, npm: "@ai-sdk/openai-compatible", url: COMMANDCODE_BASE_URL },
+    api: {
+      id: input.id,
+      // Claude models are only served from the Anthropic Messages endpoint.
+      npm: input.anthropic ? "@ai-sdk/anthropic" : "@ai-sdk/openai-compatible",
+      url: COMMANDCODE_BASE_URL,
+    },
     status: "active",
     headers: {},
     options: {},
@@ -1564,7 +1569,13 @@ function commandcodeProvider(): Info {
       interleaved: false,
     },
     release_date: "",
-    variants: Object.fromEntries(Object.entries(COMMANDCODE_VARIANTS).map(([id, body]) => [id, { ...body }])),
+    // Anthropic models get their effort ladder from ProviderTransform so the
+    // variants use thinking/effort shapes instead of reasoning_effort.
+    ...(input.anthropic
+      ? {}
+      : {
+          variants: Object.fromEntries(Object.entries(COMMANDCODE_VARIANTS).map(([id, body]) => [id, { ...body }])),
+        }),
   })
 
   return {
