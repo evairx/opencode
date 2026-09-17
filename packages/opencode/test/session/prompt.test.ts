@@ -2271,6 +2271,48 @@ it.instance("does not loop empty assistant turns for a simple reply", () =>
   }),
 )
 
+it.instance("retries a reasoning-only assistant response once", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Empty response retry" })
+
+    yield* llm.push(reply().reason("thinking").stop(), reply().text("done").stop())
+
+    const result = yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      parts: [{ type: "text", text: "Answer me" }],
+    })
+
+    expect(yield* llm.calls).toBe(2)
+    expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
+  }),
+)
+
+it.instance("fails after two reasoning-only assistant responses", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Empty response failure" })
+
+    yield* llm.push(reply().reason("thinking").stop(), reply().reason("still thinking").stop())
+
+    const exit = yield* prompt
+      .prompt({
+        sessionID: session.id,
+        agent: "build",
+        parts: [{ type: "text", text: "Answer me" }],
+      })
+      .pipe(Effect.exit)
+
+    expect(yield* llm.calls).toBe(2)
+    expect(Exit.isFailure(exit)).toBe(true)
+  }),
+)
+
 it.instance("records aborted errors when prompt is cancelled mid-stream", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)

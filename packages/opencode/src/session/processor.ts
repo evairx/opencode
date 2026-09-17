@@ -360,6 +360,7 @@ const layer = Layer.effect(
               !recentParts.every(
                 (part) =>
                   part.type === "tool" &&
+                  !part.metadata?.providerExecuted &&
                   part.tool === value.name &&
                   part.state.status !== "pending" &&
                   JSON.stringify(part.state.input) === JSON.stringify(input),

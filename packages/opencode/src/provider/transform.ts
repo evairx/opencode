@@ -1330,6 +1330,10 @@ export function options(input: {
   // so we should return early here.
   const [, gptMajorVersion, gptMinorVersion] = input.model.api.id.match(/gpt-(\d+)\.(\d+)/) ?? []
   const isGpt55OrNewer = Number(gptMajorVersion) > 5 || (Number(gptMajorVersion) === 5 && Number(gptMinorVersion) >= 5)
+  // Newer gpt families (eg gpt-6-astra) keep the same reasoning defaults even
+  // when the id doesn't carry a minor version.
+  const gptFamily = /(?:^|[^a-z0-9])gpt-(\d+)/i.exec(input.model.api.id)
+  const isGpt5OrNewer = gptFamily ? Number(gptFamily[1]) >= 5 : false
   if (input.model.api.npm === "@ai-sdk/azure" && input.providerOptions?.useCompletionUrls) {
     if (!isGpt55OrNewer) {
       result["reasoningEffort"] = "medium"
@@ -1337,7 +1341,7 @@ export function options(input: {
     return result
   }
 
-  if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
+  if (isGpt5OrNewer && !input.model.api.id.includes("gpt-5-chat")) {
     if (!input.model.api.id.includes("gpt-5-pro")) {
       result["reasoningEffort"] = "medium"
       if (

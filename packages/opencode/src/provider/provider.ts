@@ -1605,7 +1605,7 @@ function codexProvider(): Info {
     cost: {
       input: def.price.input,
       output: def.price.output,
-      cache: { read: 0, write: 0 },
+      cache: { read: def.price.cache?.read ?? 0, write: def.price.cache?.write ?? 0 },
     },
     limit: { context: def.context, input: def.input ?? def.context, output: def.output ?? 65_536 },
     capabilities: {

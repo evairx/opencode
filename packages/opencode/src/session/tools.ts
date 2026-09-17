@@ -133,6 +133,19 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     })
   }
 
+  // The Codex backend runs web search itself, so codex models get the native
+  // provider tool instead of the local Exa/Parallel implementation. The
+  // result streams back as a provider-executed tool part.
+  if (input.model.providerID === "codex") {
+    const ruleset = Permission.merge(input.agent.permission, input.session.permission ?? [])
+    if (!Permission.disabled(["websearch"], ruleset).has("websearch")) {
+      const { openai } = yield* Effect.promise(() => import("@ai-sdk/openai"))
+      // The AI SDK provider tool comes from the SDK's own provider-utils copy,
+      // so the nominal schema symbols differ from the app's "ai" Tool type.
+      tools.websearch = openai.tools.webSearch({}) as unknown as AITool
+    }
+  }
+
   const hasMcpResourceServer = Object.values(yield* mcp.clients()).some(
     (client) => !!client.getServerCapabilities()?.resources,
   )

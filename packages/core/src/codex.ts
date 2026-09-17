@@ -279,8 +279,8 @@ export interface CodexModel {
   context: number
   input?: number
   output?: number
-  /** USD per 1M tokens (input/output), used by OpenCode to estimate cost. */
-  price: { input: number; output: number }
+  /** USD per 1M tokens, used by OpenCode to estimate cost. */
+  price: { input: number; output: number; cache?: { read: number; write: number } }
   variants?: readonly string[]
 }
 
@@ -306,7 +306,7 @@ export const CODEX_MODELS: CodexModel[] = [
     context: 400_000,
     input: 272_000,
     output: 128_000,
-    price: { input: 4, output: 20 },
+    price: { input: 5, output: 30, cache: { read: 0.5, write: 6.25 } },
     variants: ["low", "medium", "high", "xhigh"],
   },
   {
@@ -316,7 +316,7 @@ export const CODEX_MODELS: CodexModel[] = [
     context: 400_000,
     input: 272_000,
     output: 128_000,
-    price: { input: 2, output: 12 },
+    price: { input: 2, output: 12, cache: { read: 0.2, write: 2.5 } },
     variants: ["low", "medium", "high", "xhigh"],
   },
   {
@@ -326,7 +326,7 @@ export const CODEX_MODELS: CodexModel[] = [
     context: 400_000,
     input: 272_000,
     output: 128_000,
-    price: { input: 0.2, output: 1.2 },
+    price: { input: 0.2, output: 1.2, cache: { read: 0.02, write: 0.25 } },
     variants: ["low", "medium", "high", "xhigh"],
   },
   {
@@ -336,7 +336,7 @@ export const CODEX_MODELS: CodexModel[] = [
     context: 400_000,
     input: 272_000,
     output: 128_000,
-    price: { input: 5, output: 30 },
+    price: { input: 5, output: 30, cache: { read: 0.5, write: 0 } },
     variants: ["low", "medium", "high", "xhigh"],
   },
   {

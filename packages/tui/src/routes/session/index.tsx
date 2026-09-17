@@ -2204,10 +2204,34 @@ function WebFetch(props: ToolProps) {
 }
 
 function WebSearch(props: ToolProps) {
+  // Local Exa/Parallel searches carry the query in the tool input; the Codex
+  // backend executes web searches itself and reports the query in the result.
+  const action = createMemo(() => {
+    const value = props.metadata.action
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : undefined
+  })
+  const query = createMemo(() => {
+    const fromInput = stringValue(props.input.query)
+    if (fromInput !== undefined) return fromInput
+    const current = action()
+    if (!current) return undefined
+    const single = stringValue(current.query)
+    if (single !== undefined) return single
+    const queries = current.queries
+    if (Array.isArray(queries)) return stringValue(queries[0])
+    return undefined
+  })
+  const results = createMemo(() => {
+    const count = numberValue(props.metadata.numResults)
+    if (count !== undefined) return count
+    return Array.isArray(props.metadata.sources) ? props.metadata.sources.length : undefined
+  })
   return (
-    <InlineTool icon="◈" pending="Searching web…" complete={stringValue(props.input.query)} part={props.part}>
-      {webSearchProviderLabel(props.metadata.provider)} "{stringValue(props.input.query)}"{" "}
-      <Show when={numberValue(props.metadata.numResults)}>({numberValue(props.metadata.numResults)} results)</Show>
+    <InlineTool icon="◈" pending="Searching web…" complete={query()} part={props.part}>
+      {webSearchProviderLabel(props.metadata.provider)} "{query()}"{" "}
+      <Show when={results() !== undefined}>({results()} results)</Show>
     </InlineTool>
   )
 }

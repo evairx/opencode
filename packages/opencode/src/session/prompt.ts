@@ -1083,6 +1083,7 @@ const layer = Layer.effect(
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
+        let retriedEmptyResponse = false
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
@@ -1107,12 +1108,17 @@ const layer = Layer.effect(
             lastAssistantMsg?.parts.some(
               (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
             ) ?? false
+          const hasVisibleOutput =
+            lastAssistantMsg?.parts.some(
+              (part) => part.type === "tool" || (part.type === "text" && part.text.trim().length > 0),
+            ) ?? false
 
           if (
             lastAssistant?.finish &&
             !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
-            lastAssistant.parentID === lastUser.id
+            lastAssistant.parentID === lastUser.id &&
+            !(retriedEmptyResponse && !hasVisibleOutput)
           ) {
             const orphan = lastAssistantMsg?.parts.find(
               (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
@@ -1335,6 +1341,28 @@ const layer = Layer.effect(
                 }).toObject()
                 yield* sessions.updateMessage(handle.message)
                 return "break" as const
+              }
+
+              const parts = yield* MessageV2.parts(handle.message.id).pipe(
+                Effect.provideService(Database.Service, database),
+              )
+              const hasVisibleOutput = parts.some(
+                (part) => part.type === "tool" || (part.type === "text" && part.text.trim().length > 0),
+              )
+              if (!hasVisibleOutput) {
+                if (!retriedEmptyResponse) {
+                  retriedEmptyResponse = true
+                  yield* Effect.logWarning("retrying empty assistant response", {
+                    "session.id": sessionID,
+                    messageID: handle.message.id,
+                  })
+                  return "continue" as const
+                }
+                const error = new NamedError.Unknown({ message: "Model returned an empty response after retry" })
+                handle.message.error = error.toObject()
+                yield* sessions.updateMessage(handle.message)
+                yield* events.publish(Session.Event.Error, { sessionID, error: handle.message.error })
+                throw error
               }
             }
 

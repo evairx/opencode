@@ -192,7 +192,13 @@ export const CodexPlugin = define({
             input: ["text"],
             output: ["text"],
           }
-          model.cost = [{ input: def.price.input, output: def.price.output, cache: { read: 0, write: 0 } }]
+          model.cost = [
+            {
+              input: def.price.input,
+              output: def.price.output,
+              cache: { read: def.price.cache?.read ?? 0, write: def.price.cache?.write ?? 0 },
+            },
+          ]
           model.limit = { context: def.context, input: def.input ?? def.context, output: def.output ?? 65_536 }
           model.status = "active"
           model.enabled = true

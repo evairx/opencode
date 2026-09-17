@@ -165,3 +165,45 @@ it.effect("preserves running tool start time across metadata updates", () =>
     }
   }),
 )
+
+const fakeProcessor = {
+  message: { id: messageID, sessionID },
+  updateToolCall: () => Effect.die("unused"),
+  completeToolCall: () => Effect.die("unused"),
+} as unknown as Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
+
+it.effect("adds the native codex web search provider tool", () =>
+  Effect.gen(function* () {
+    const tools = yield* SessionTools.resolve({
+      agent,
+      model: { ...model, providerID: ProviderV2.ID.make("codex") } as Provider.Model,
+      session: { id: sessionID, permission: [] } as unknown as Session.Info,
+      processor: fakeProcessor,
+      bypassAgentCheck: false,
+      messages: [],
+      promptOps: {} as never,
+    })
+
+    expect(tools.websearch).toBeDefined()
+    expect((tools.websearch as { type?: string }).type).toBe("provider")
+  }),
+)
+
+it.effect("omits the codex web search tool when the websearch permission is denied", () =>
+  Effect.gen(function* () {
+    const tools = yield* SessionTools.resolve({
+      agent,
+      model: { ...model, providerID: ProviderV2.ID.make("codex") } as Provider.Model,
+      session: {
+        id: sessionID,
+        permission: [{ permission: "websearch", pattern: "*", action: "deny" }],
+      } as unknown as Session.Info,
+      processor: fakeProcessor,
+      bypassAgentCheck: false,
+      messages: [],
+      promptOps: {} as never,
+    })
+
+    expect(tools.websearch).toBeUndefined()
+  }),
+)
