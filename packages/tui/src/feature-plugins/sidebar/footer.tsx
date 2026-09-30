@@ -59,8 +59,8 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
       <Show when={branch()}>
         {(b) => (
           <text fg={theme().textMuted}>
-            <span style={{ fg: theme().text }}> </span>
-            <span>{b()}</span>
+            <span>branch:</span>
+            <span style={{ fg: theme().text }}>{b()}</span>
           </text>
         )}
       </Show>

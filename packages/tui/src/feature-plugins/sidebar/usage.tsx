@@ -13,7 +13,7 @@ const USAGE_COLORS = {
   percentage: "#f5f5f5",
 } as const
 
-const THIN_BAR = "━".repeat(64)
+const THIN_BAR = "▀".repeat(64)
 
 function ThinProgressBar(props: { fraction: number; width?: number }) {
   const fraction = () => Math.min(1, Math.max(0, props.fraction))
