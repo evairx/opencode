@@ -1750,13 +1750,13 @@ function formatPathBreadcrumb(fullPath: string): { parent: string; current: stri
 
   if (relevant.length <= 3) {
     return {
-      parent: relevant.slice(0, -1).join(" > ") + (relevant.length > 1 ? " > " : ""),
+      parent: relevant.slice(0, -1).join(" › ") + (relevant.length > 1 ? " › " : ""),
       current: relevant.at(-1) || "",
     }
   }
 
   return {
-    parent: relevant[0] + " > ... > ",
+    parent: relevant[0] + " › … › ",
     current: relevant.at(-1) || "",
   }
 }
