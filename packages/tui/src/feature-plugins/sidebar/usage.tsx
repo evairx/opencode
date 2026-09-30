@@ -1,11 +1,9 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
-import { createMemo, createSignal, createEffect, on, onMount, onCleanup, For, Show } from "solid-js"
+import { createMemo, createSignal, createEffect, on, onMount, onCleanup, Show } from "solid-js"
 import { getAgyUsage, type AgyUsageBucket, type AgyUsageGroup } from "@opencode-ai/core/antigravity"
 import { getCodexUsage } from "@opencode-ai/core/codex"
 import { useLocal } from "../../context/local"
-import { useDialog } from "../../ui/dialog"
-import { DialogUsage } from "../../component/dialog-usage"
 
 const id = "internal:sidebar-usage"
 
@@ -15,15 +13,16 @@ const USAGE_COLORS = {
   percentage: "#f5f5f5",
 } as const
 
-const THIN_BAR = "▀".repeat(128)
+const THIN_BAR = "▀".repeat(64)
 
-function ThinProgressBar(props: { fraction: number }) {
+function ThinProgressBar(props: { fraction: number; width?: number }) {
   const fraction = () => Math.min(1, Math.max(0, props.fraction))
   const filledPercent = () => Math.round(fraction() * 100)
   const remainingPercent = () => 100 - filledPercent()
+  const barWidth = props.width ?? 10
 
   return (
-    <box flexDirection="row" flexGrow={1} flexBasis={0} minWidth={0} height={1} overflow="hidden">
+    <box width={barWidth} flexDirection="row" height={1} overflow="hidden">
       <Show when={filledPercent() > 0}>
         <box width={`${filledPercent()}%`} height={1} flexShrink={0} minWidth={0} overflow="hidden">
           <text fg={USAGE_COLORS.fill}>{THIN_BAR}</text>
@@ -45,26 +44,6 @@ function groupNameFor(providerID: string | undefined, modelID: string): string {
   return modelID.startsWith("gemini") ? "Gemini Models" : "Claude and GPT models"
 }
 
-function getBucketLabel(bucket: AgyUsageBucket): string {
-  const name = bucket.name.toLowerCase()
-  if (bucket.window === "5h" || name.startsWith("five")) {
-    return "5h Limit"
-  }
-  if (bucket.window === "weekly" || name.startsWith("weekly")) {
-    return "Weekly Limit"
-  }
-  return bucket.name
-}
-
-function formatReset(resetTime: string | undefined): string | undefined {
-  const at = resetTime ? Date.parse(resetTime) : NaN
-  if (Number.isNaN(at)) return undefined
-  const minutes = Math.ceil((at - Date.now()) / 60_000)
-  if (minutes < 60) return `in ${Math.max(minutes, 1)}m`
-  if (minutes < 48 * 60) return `in ${Math.ceil(minutes / 60)}h`
-  return `in ${Math.ceil(minutes / (24 * 60))}d`
-}
-
 let sharedGroup: AgyUsageGroup | undefined
 let sharedLastFetch = 0
 const listeners = new Set<(g: AgyUsageGroup | undefined) => void>()
@@ -81,7 +60,6 @@ function updateSharedGroup(group: AgyUsageGroup | undefined) {
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
   const local = useLocal()
-  const dialog = useDialog()
 
   const [group, setGroup] = createSignal<AgyUsageGroup | undefined>(sharedGroup)
   const [loading, setLoading] = createSignal(!sharedGroup)
@@ -111,7 +89,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
         updateSharedGroup(found)
       }
     } catch {
-      // Ignore background errors in sidebar
+      // Ignore background errors in sidebar silently
     } finally {
       setLoading(false)
     }
@@ -159,22 +137,30 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     ),
   )
 
-  const buckets = createMemo(() => {
+  // Select only the 5h limit bucket
+  const bucket = createMemo(() => {
     const g = group()
-    if (!g) return []
-    return g.buckets.slice().sort((a, b) => Number(a.window === "weekly") - Number(b.window === "weekly"))
+    if (!g) return undefined
+    return (
+      g.buckets.find(
+        (b) =>
+          b.window === "5h" ||
+          b.name.toLowerCase().startsWith("five") ||
+          b.name.toLowerCase().includes("5h"),
+      ) ?? g.buckets[0]
+    )
   })
 
+  const fraction = () => {
+    const b = bucket()
+    return b ? Math.min(1, Math.max(0, b.remaining_fraction)) : 0
+  }
+  const percent = () => Math.round(fraction() * 100)
+
   return (
-    <box
-      onMouseDown={() => {
-        if (isQuota()) {
-          dialog.replace(() => <DialogUsage />)
-        }
-      }}
-    >
+    <box>
       <text fg={theme().text}>
-        <b>Usage</b>
+        <b>USAGE</b>
       </text>
 
       <Show
@@ -182,35 +168,14 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
         fallback={<text fg={theme().textMuted}>No quota limits</text>}
       >
         <Show
-          when={buckets().length > 0}
+          when={bucket()}
           fallback={<text fg={theme().textMuted}>{loading() ? "Loading usage…" : "No quota data"}</text>}
         >
-          <box flexDirection="column" gap={1}>
-            <For each={buckets()}>
-              {(bucket) => {
-                const fraction = () => Math.min(1, Math.max(0, bucket.remaining_fraction))
-                const percent = () => Math.round(fraction() * 100)
-                const label = () => getBucketLabel(bucket)
-                const reset = () => formatReset(bucket.reset_time)
-
-                return (
-                  <box width="100%" flexDirection="column" gap={0}>
-                    <box width="100%" flexDirection="row" alignItems="center" gap={1} height={1}>
-                      <ThinProgressBar fraction={fraction()} />
-                      <box width={4} height={1} flexShrink={0} alignItems="flex-end">
-                        <text fg={USAGE_COLORS.percentage}>{percent()}%</text>
-                      </box>
-                    </box>
-                    <box width="100%" flexDirection="row" gap={1} height={1}>
-                      <text fg={theme().textMuted}>{label()}</text>
-                      <Show when={reset()}>
-                        <text fg={theme().textMuted}>· {reset()}</text>
-                      </Show>
-                    </box>
-                  </box>
-                )
-              }}
-            </For>
+          <box flexDirection="row" alignItems="center" gap={1} height={1}>
+            <ThinProgressBar fraction={fraction()} width={10} />
+            <box width={4} height={1} flexShrink={0} alignItems="flex-end">
+              <text fg={USAGE_COLORS.percentage}>{percent()}%</text>
+            </box>
           </box>
         </Show>
       </Show>
