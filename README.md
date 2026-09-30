@@ -62,40 +62,90 @@ Highlights:
 
 ## Installation
 
-The installer downloads a **Windows x64** release and replaces your global `opencode` binary at
-`~/.opencode/bin`. Your config files and plugins are preserved — the installer never touches them.
-OpenCode then works exactly as before, but with this fork's providers.
+Automated one-line installers are available for both **PC (Windows / Linux / macOS)** and **Android (Termux ARM64)**. Your configuration files and plugins are always preserved.
 
-**Plain `install.ps1` always installs the latest release** — no `-Version` needed. Pass
-`-Version <x>` (for example `install.ps1 -Version 1.0b`) to pin a specific release, and `-Force` to
-reinstall over a running/newer install.
+### 🖥️ PC Normal (x86_64 / x64)
 
-**One line — PowerShell (CMD or PowerShell):**
+> On PC, **Antigravity (Google via `agy`)**, **Codex (ChatGPT)**, **CommandCode**, Claude, OpenAI, and all other providers are **100% active and enabled**.
+
+**Windows (PowerShell — run in PowerShell or CMD):**
 
 ```powershell
 powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/evairx/opencode/dev/install.ps1 | iex"
 ```
 
-**Or download and run it:**
-
+*Or download and run manually:*
 ```powershell
 curl -fsSL -o install.ps1 https://raw.githubusercontent.com/evairx/opencode/dev/install.ps1
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
-**macOS / Linux (curl):**
+**Linux & macOS (curl):**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/evairx/opencode/dev/install | bash
 ```
 
-This fork publishes **Windows x64 binaries**; on macOS/Linux the `install` script points you to the
-correct path. Binaries live under [Releases](https://github.com/evairx/opencode/releases).
+---
+
+### 📱 Android / Termux (ARM64 / aarch64)
 
 > [!NOTE]
-> Building from source is also supported: from `packages/opencode`, run
-> `bun run script/build.ts --single` and copy `dist/opencode-windows-x64/bin/opencode.exe` over
-> `~/.opencode/bin/opencode.exe`.
+> **Termux compatibility**: Google's `agy` CLI binary is not available for Android/Bionic libc, so **Antigravity is automatically excluded** on Termux. **Codex (ChatGPT)**, **CommandCode**, Claude, OpenAI, and all other models run natively with high performance without virtualization (`proot`).
+
+**Full Automated One-Liner (Termux):**
+
+Just copy and paste this command into Termux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/evairx/opencode/dev/install-termux.sh | bash
+```
+
+*What the installer does automatically:*
+1. Detects `aarch64` architecture.
+2. Installs required dependency `ripgrep` via `pkg install -y ripgrep`.
+3. Downloads and installs the latest Termux package or standalone binary bundle (`libopentui.so` + `opencode`).
+4. Configures `$PREFIX/bin/opencode` so you can launch it immediately with `opencode`.
+
+#### Alternative manual packages (Termux):
+
+* **Deb package (`pkg` / `dpkg`):**
+  ```bash
+  curl -LO https://github.com/evairx/opencode/releases/latest/download/opencode_aarch64.deb
+  dpkg -i opencode_aarch64.deb
+  opencode
+  ```
+
+* **Pacman package (if using pacman in Termux):**
+  ```bash
+  curl -LO https://github.com/evairx/opencode/releases/latest/download/opencode-aarch64.pkg.tar.xz
+  pacman -U opencode-aarch64.pkg.tar.xz
+  opencode
+  ```
+
+* **Standalone ZIP:**
+  ```bash
+  curl -LO https://github.com/evairx/opencode/releases/latest/download/opencode-android-aarch64.zip
+  unzip opencode-android-aarch64.zip
+  mv opencode $PREFIX/bin/opencode
+  mkdir -p $PREFIX/libexec/opencode
+  mv opencode.bin libopentui.so $PREFIX/libexec/opencode/
+  chmod +x $PREFIX/bin/opencode $PREFIX/libexec/opencode/opencode.bin
+  opencode
+  ```
+
+---
+
+### 🛠️ Building from source
+
+* **PC (Windows / Linux / macOS):** From `packages/opencode`, run:
+  ```bash
+  bun run script/build.ts --single
+  ```
+* **Termux ARM64:** From the repository root, run:
+  ```bash
+  ./scripts/termux/build-all.sh
+  ```
 
 > [!WARNING]
 > This fork ships its own providers (Antigravity, Codex, CommandCode, ...) and its own

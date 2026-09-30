@@ -75,4 +75,20 @@ export const Flag = {
   get OPENCODE_CLIENT() {
     return process.env["OPENCODE_CLIENT"] ?? "cli"
   },
+  get isTermux() {
+    return isTermux()
+  },
+  get OPENCODE_DISABLE_ANTIGRAVITY() {
+    const env = process.env["OPENCODE_DISABLE_ANTIGRAVITY"]
+    if (env !== undefined) return truthy("OPENCODE_DISABLE_ANTIGRAVITY")
+    return isTermux()
+  },
+}
+
+export function isTermux() {
+  return (
+    process.platform === "android" ||
+    Boolean(process.env["TERMUX_VERSION"]) ||
+    Boolean(process.env["PREFIX"]?.includes("com.termux"))
+  )
 }

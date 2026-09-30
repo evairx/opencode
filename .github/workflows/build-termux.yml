@@ -1,0 +1,67 @@
+name: build-termux
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+    paths:
+      - 'scripts/termux/**'
+      - 'packages/core/**'
+      - 'packages/opencode/**'
+
+jobs:
+  build-android-arm64:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27c
+          link-to-sdk: true
+
+      - name: Build and Package for Termux
+        run: |
+          chmod +x scripts/termux/*.sh
+          export ANDROID_NDK_HOME="$ANDROID_NDK_ROOT"
+          export ZIG_BIN="zig"
+          export HOST_BUN="bun"
+          ./scripts/termux/build-all.sh
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-termux-arm64
+          path: |
+            build-termux/packages/*.zip
+            build-termux/packages/*.pkg.tar.xz
+            build-termux/packages/*.deb
+            build-termux/packages/SHA256SUMS
+
+      - name: Release to GitHub Releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build-termux/packages/*.zip
+            build-termux/packages/*.pkg.tar.xz
+            build-termux/packages/*.deb
+            build-termux/packages/SHA256SUMS

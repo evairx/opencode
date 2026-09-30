@@ -25,6 +25,7 @@ import { AntigravityAuthPlugin } from "./antigravity"
 import { CommandCodeAuthPlugin } from "./commandcode"
 import { CodexProviderAuthPlugin } from "./codex"
 import { SnowflakeCortexAuthPlugin } from "./snowflake-cortex"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Effect, Layer, Context } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
@@ -85,7 +86,7 @@ function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
     SnowflakeCortexAuthPlugin,
     XaiAuthPlugin,
     CerebrasPlugin,
-    AntigravityAuthPlugin,
+    ...(Flag.OPENCODE_DISABLE_ANTIGRAVITY ? [] : [AntigravityAuthPlugin]),
     CommandCodeAuthPlugin,
     CodexProviderAuthPlugin,
   ]

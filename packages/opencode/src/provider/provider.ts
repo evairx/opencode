@@ -8,6 +8,7 @@ import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Npm } from "@opencode-ai/core/npm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Plugin } from "../plugin"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
@@ -1691,8 +1692,10 @@ const layer = Layer.effect(
         const cfg = yield* config.get()
         const modelsDev = yield* modelsDevSvc.get()
         const catalog = mapValues(modelsDev, fromModelsDevProvider)
-        const antigravity = antigravityProvider()
-        catalog[antigravity.id] = antigravity
+        if (!Flag.OPENCODE_DISABLE_ANTIGRAVITY) {
+          const antigravity = antigravityProvider()
+          catalog[antigravity.id] = antigravity
+        }
         const commandcode = commandcodeProvider()
         catalog[commandcode.id] = commandcode
         const codex = codexProvider()
