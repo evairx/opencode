@@ -212,6 +212,8 @@ export function Prompt(props: PromptProps) {
   const [cursorVersion, setCursorVersion] = createSignal(0)
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const hasRightContent = createMemo(() => Boolean(props.right))
+  const currentDirectory = createMemo(() => location()?.directory ?? paths.cwd)
+  const directoryBreadcrumb = createMemo(() => formatPathBreadcrumb(currentDirectory()))
 
   function promptModelWarning() {
     toast.show({
@@ -1645,8 +1647,28 @@ export function Prompt(props: PromptProps) {
             <Match when={true}>
               {props.hint ?? (
                 <Show when={props.sessionID} fallback={<text />}>
-                  <box marginLeft={1}>
-                    <text fg={theme.textMuted}>{location()?.directory ?? paths.cwd}</text>
+                  <box
+                    marginLeft={1}
+                    onMouseDown={() => {
+                      const full = currentDirectory()
+                      if (full) {
+                        void clipboard
+                          .write?.(full)
+                          ?.then(() => {
+                            toast.show({ message: "Path copied to clipboard", variant: "info" })
+                          })
+                          ?.catch(() => {
+                            toast.show({ message: "Failed to copy path", variant: "error" })
+                          })
+                      }
+                    }}
+                  >
+                    <text>
+                      <Show when={directoryBreadcrumb().parent}>
+                        <span style={{ fg: theme.textMuted }}>{directoryBreadcrumb().parent}</span>
+                      </Show>
+                      <span style={{ fg: theme.text }}>{directoryBreadcrumb().current}</span>
+                    </text>
                   </box>
                 </Show>
               )}
@@ -1713,4 +1735,28 @@ export function Prompt(props: PromptProps) {
       />
     </>
   )
+}
+
+function formatPathBreadcrumb(fullPath: string): { parent: string; current: string } {
+  if (!fullPath) return { parent: "", current: "" }
+  const normalized = fullPath.replace(/\\/g, "/")
+  const parts = normalized.split("/").filter(Boolean)
+  if (parts.length === 0) return { parent: "", current: fullPath }
+  if (parts.length === 1) return { parent: "", current: parts[0] }
+
+  const hasDrive = parts[0].endsWith(":")
+  const startIndex = hasDrive ? (parts.length > 2 ? 1 : 0) : 0
+  const relevant = parts.slice(startIndex)
+
+  if (relevant.length <= 3) {
+    return {
+      parent: relevant.slice(0, -1).join(" > ") + (relevant.length > 1 ? " > " : ""),
+      current: relevant.at(-1) || "",
+    }
+  }
+
+  return {
+    parent: relevant[0] + " > ... > ",
+    current: relevant.at(-1) || "",
+  }
 }

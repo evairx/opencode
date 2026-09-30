@@ -13,13 +13,13 @@ const USAGE_COLORS = {
   percentage: "#f5f5f5",
 } as const
 
-const THIN_BAR = "▀".repeat(64)
+const THIN_BAR = "━".repeat(64)
 
 function ThinProgressBar(props: { fraction: number; width?: number }) {
   const fraction = () => Math.min(1, Math.max(0, props.fraction))
   const filledPercent = () => Math.round(fraction() * 100)
   const remainingPercent = () => 100 - filledPercent()
-  const barWidth = props.width ?? 10
+  const barWidth = props.width ?? 18
 
   return (
     <box width={barWidth} flexDirection="row" height={1} overflow="hidden">
@@ -171,11 +171,11 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
           when={bucket()}
           fallback={<text fg={theme().textMuted}>{loading() ? "Loading usage…" : "No quota data"}</text>}
         >
-          <box flexDirection="row" alignItems="center" gap={1} height={1}>
-            <ThinProgressBar fraction={fraction()} width={10} />
-            <box width={4} height={1} flexShrink={0} alignItems="flex-end">
-              <text fg={USAGE_COLORS.percentage}>{percent()}%</text>
-            </box>
+          <box flexDirection="row" alignItems="center" gap={1} height={1} marginTop={1}>
+            <ThinProgressBar fraction={fraction()} width={18} />
+            <text fg={USAGE_COLORS.percentage} flexShrink={0}>
+              {percent()}%
+            </text>
           </box>
         </Show>
       </Show>
