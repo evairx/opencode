@@ -62,12 +62,11 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const local = useLocal()
 
   const [group, setGroup] = createSignal<AgyUsageGroup | undefined>(sharedGroup)
-  const [loading, setLoading] = createSignal(!sharedGroup)
 
   const model = () => local.model.current()
   const isQuota = createMemo(() => {
     const p = model()?.providerID
-    return p === "codex" || p === "antigravity"
+    return p === "codex" || p === "antigravity" || p?.startsWith("anti") || p === "anthropic" || p === "claude"
   })
 
   const fetchUsage = async (force = false) => {
@@ -75,7 +74,6 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     const currentModel = model()
     if (!currentModel) return
 
-    setLoading(true)
     try {
       const groups =
         currentModel.providerID === "codex"
@@ -90,8 +88,6 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       }
     } catch {
       // Ignore background errors in sidebar silently
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -158,28 +154,20 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const percent = () => Math.round(fraction() * 100)
 
   return (
-    <box>
-      <text fg={theme().text}>
-        <b>USAGE</b>
-      </text>
+    <Show when={isQuota() && bucket()}>
+      <box>
+        <text fg={theme().text}>
+          <b>USAGE</b>
+        </text>
 
-      <Show
-        when={isQuota()}
-        fallback={<text fg={theme().textMuted}>No quota limits</text>}
-      >
-        <Show
-          when={bucket()}
-          fallback={<text fg={theme().textMuted}>{loading() ? "Loading usage…" : "No quota data"}</text>}
-        >
-          <box flexDirection="row" alignItems="center" gap={1} height={1}>
-            <ThinProgressBar fraction={fraction()} width={18} />
-            <box width={4} height={1} flexShrink={0} alignItems="flex-end">
-              <text fg={USAGE_COLORS.percentage}>{percent()}%</text>
-            </box>
+        <box flexDirection="row" alignItems="center" gap={1} height={1}>
+          <ThinProgressBar fraction={fraction()} width={18} />
+          <box width={4} height={1} flexShrink={0} alignItems="flex-end">
+            <text fg={USAGE_COLORS.percentage}>{percent()}%</text>
           </box>
-        </Show>
-      </Show>
-    </box>
+        </box>
+      </box>
+    </Show>
   )
 }
 
