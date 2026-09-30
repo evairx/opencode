@@ -2897,6 +2897,54 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
       { type: "tool-call", toolCallId: "toolu_2", toolName: "glob", input: { pattern: "**/*.pdf" } },
     ])
   })
+
+  test("scrubs codex websearch tool calls and results for non-codex models", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "call_ws", toolName: "websearch", input: { query: "weather" } },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "call_ws", toolName: "websearch", output: { type: "text", value: "sunny" } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(1)
+    expect(result[0].role).toBe("assistant")
+    expect(result[0].content).toEqual([
+      { type: "text", text: "[Web Search: weather]" },
+    ])
+  })
+
+  test("inserts assistant separator when tool is followed by user message", () => {
+    const msgs = [
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "call_1", toolName: "bash", output: { type: "text", value: "ok" } },
+        ],
+      },
+      {
+        role: "user",
+        content: "next prompt",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel, {}) as any[]
+
+    expect(result).toHaveLength(3)
+    expect(result[0].role).toBe("tool")
+    expect(result[1].role).toBe("assistant")
+    expect(result[1].content).toEqual([{ type: "text", text: "Done." }])
+    expect(result[2].role).toBe("user")
+  })
 })
 
 describe("ProviderTransform.message - strip openai metadata when store=false", () => {

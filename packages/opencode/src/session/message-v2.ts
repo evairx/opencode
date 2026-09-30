@@ -238,7 +238,14 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           })
         }
       }
-      if (userMessage.parts.length > 0) result.push(userMessage)
+      if (userMessage.parts.length > 0) {
+        const prev = result[result.length - 1]
+        if (prev && prev.role === "user") {
+          prev.parts.push(...userMessage.parts)
+        } else {
+          result.push(userMessage)
+        }
+      }
     }
 
     if (msg.info.role === "assistant") {
@@ -288,6 +295,27 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             type: "step-start",
           })
         if (part.type === "tool") {
+          if (differentModel && part.metadata?.providerExecuted) {
+            const query =
+              typeof part.state.input === "object" && part.state.input !== null && "query" in part.state.input
+                ? String((part.state.input as Record<string, unknown>).query)
+                : typeof part.state.input === "string"
+                  ? part.state.input
+                  : JSON.stringify(part.state.input)
+            const outputText =
+              part.state.status === "completed"
+                ? part.state.time.compacted
+                  ? "[Old tool result content cleared]"
+                  : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
+                : part.state.status === "error"
+                  ? `Error: ${part.state.error}`
+                  : "[Tool execution was interrupted]"
+            assistantMessage.parts.push({
+              type: "text",
+              text: `[Executed ${part.tool}: ${query}]\n${outputText}`,
+            })
+            continue
+          }
           toolNames.add(part.tool)
           if (part.state.status === "completed") {
             const outputText = part.state.time.compacted

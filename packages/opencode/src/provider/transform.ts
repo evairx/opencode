@@ -352,6 +352,64 @@ function normalizeMessages(
     })
   }
 
+  if (model.providerID !== "codex") {
+    msgs = msgs
+      .map((msg) => {
+        if (msg.role === "assistant" && Array.isArray(msg.content)) {
+          const hasWebSearch = msg.content.some((part) => part.type === "tool-call" && part.toolName === "websearch")
+          if (!hasWebSearch) return msg
+          return {
+            ...msg,
+            content: msg.content.map((part) => {
+              if (part.type === "tool-call" && part.toolName === "websearch") {
+                const query =
+                  typeof part.input === "object" && part.input !== null && "query" in part.input
+                    ? String((part.input as Record<string, unknown>).query)
+                    : JSON.stringify(part.input)
+                return {
+                  type: "text" as const,
+                  text: `[Web Search: ${query}]`,
+                }
+              }
+              return part
+            }),
+          }
+        }
+        if (msg.role === "tool" && Array.isArray(msg.content)) {
+          const filtered = msg.content.filter((part) => part.type !== "tool-result" || part.toolName !== "websearch")
+          if (filtered.length === 0) return undefined
+          return { ...msg, content: filtered }
+        }
+        return msg
+      })
+      .filter((msg): msg is ModelMessage => msg !== undefined)
+  }
+
+  // Fix message sequence: tool messages cannot be followed by user messages
+  const isMistral =
+    model.providerID === "mistral" ||
+    ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((f) => model.api.id.toLowerCase().includes(f))
+  if (!isMistral) {
+    const sequenceFixed: ModelMessage[] = []
+    for (let i = 0; i < msgs.length; i++) {
+      const msg = msgs[i]
+      const nextMsg = msgs[i + 1]
+      sequenceFixed.push(msg)
+      if (msg.role === "tool" && nextMsg?.role === "user") {
+        sequenceFixed.push({
+          role: "assistant",
+          content: [
+            {
+              type: "text",
+              text: "Done.",
+            },
+          ],
+        })
+      }
+    }
+    msgs = sequenceFixed
+  }
+
   return msgs
 }
 

@@ -1361,6 +1361,89 @@ describe("session.message-v2.toModelMessage", () => {
     const texts = (result[0].content as any[]).filter((p) => p.type === "text")
     expect(texts.map((t) => t.text)).toStrictEqual(["", "hello"])
   })
+
+  test("merges consecutive user messages when intermediate assistant errored", async () => {
+    const codexProviderID = ProviderV2.ID.make("codex")
+    const anthropicProviderID = ProviderV2.ID.make("anthropic")
+    const anthropicModel: Provider.Model = {
+      ...model,
+      id: ModelV2.ID.make("claude-3-5-sonnet"),
+      providerID: anthropicProviderID,
+      api: { id: "claude-3-5-sonnet-20241022", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
+    }
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo("u1"),
+        parts: [{ ...basePart("u1", "p1"), type: "text", text: "Prompt 1" }] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(
+          "a1",
+          "u1",
+          new SessionV1.APIError({ message: "Usage limit reached", isRetryable: false }).toObject(),
+          { providerID: codexProviderID, modelID: "gpt-5.6-sol" },
+        ),
+        parts: [] as SessionV1.Part[],
+      },
+      {
+        info: userInfo("u2"),
+        parts: [{ ...basePart("u2", "p2"), type: "text", text: "Prompt 2" }] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, anthropicModel)
+    expect(result).toHaveLength(1)
+    expect(result[0].role).toBe("user")
+    expect(result[0].content).toStrictEqual([
+      { type: "text", text: "Prompt 1" },
+      { type: "text", text: "Prompt 2" },
+    ])
+  })
+
+  test("converts providerExecuted tools to text when switching models", async () => {
+    const codexProviderID = ProviderV2.ID.make("codex")
+    const anthropicProviderID = ProviderV2.ID.make("anthropic")
+    const anthropicModel: Provider.Model = {
+      ...model,
+      id: ModelV2.ID.make("claude-3-5-sonnet"),
+      providerID: anthropicProviderID,
+      api: { id: "claude-3-5-sonnet-20241022", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
+    }
+
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo("u1"),
+        parts: [{ ...basePart("u1", "p1"), type: "text", text: "Search web" }] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo("a1", "u1", undefined, { providerID: codexProviderID, modelID: "gpt-5.6-sol" }),
+        parts: [
+          {
+            ...basePart("a1", "p1"),
+            type: "tool",
+            tool: "websearch",
+            callID: "call_ws",
+            state: { status: "completed", input: { query: "weather" }, output: "sunny", title: "", metadata: {}, time: { start: 0, end: 1 } },
+            metadata: { providerExecuted: true },
+          },
+        ] as unknown as SessionV1.Part[],
+      },
+      {
+        info: userInfo("u2"),
+        parts: [{ ...basePart("u2", "p2"), type: "text", text: "thanks" }] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, anthropicModel)
+    expect(result).toHaveLength(3)
+    expect(result[0].role).toBe("user")
+    expect(result[1].role).toBe("assistant")
+    expect(result[1].content).toStrictEqual([
+      { type: "text", text: "[Executed websearch: weather]\nsunny" },
+    ])
+    expect(result[2].role).toBe("user")
+  })
 })
 
 describe("session.message-v2.fromError", () => {
