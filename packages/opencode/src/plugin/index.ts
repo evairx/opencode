@@ -22,6 +22,7 @@ import { DigitalOceanAuthPlugin } from "./digitalocean"
 import { XaiAuthPlugin } from "./xai"
 import { CerebrasPlugin } from "./cerebras"
 import { AntigravityAuthPlugin } from "./antigravity"
+import { ClaudeAuthPlugin } from "./claude"
 import { CommandCodeAuthPlugin } from "./commandcode"
 import { CodexProviderAuthPlugin } from "./codex"
 import { SnowflakeCortexAuthPlugin } from "./snowflake-cortex"
@@ -89,6 +90,7 @@ function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
     ...(Flag.OPENCODE_DISABLE_ANTIGRAVITY ? [] : [AntigravityAuthPlugin]),
     CommandCodeAuthPlugin,
     CodexProviderAuthPlugin,
+    ClaudeAuthPlugin,
   ]
 }
 

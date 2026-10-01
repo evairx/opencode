@@ -8,7 +8,7 @@ import {
   CODEX_CALLBACK_PORT,
   CODEX_CLIENT_ID,
   CODEX_ISSUER,
-  CODEX_MODELS,
+  getCodexModels,
   buildCodexAuthorizeUrl,
   exchangeCodexCodeForTokens,
   extractCodexAccountId,
@@ -175,7 +175,7 @@ export const CodexPlugin = define({
         provider.integrationID = Integration.ID.make("codex")
         provider.api = { type: "aisdk", package: "@ai-sdk/openai", url: CODEX_BASE_URL }
       })
-      for (const def of CODEX_MODELS) {
+      for (const def of getCodexModels()) {
         const modelID = ModelV2.ID.make(def.id)
         catalog.model.update(providerID, modelID, (model) => {
           model.name = def.name

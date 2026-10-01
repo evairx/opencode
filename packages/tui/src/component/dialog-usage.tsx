@@ -13,6 +13,7 @@ import {
   type AgyUsageGroup,
 } from "@opencode-ai/core/antigravity"
 import { getCodexUsage } from "@opencode-ai/core/codex"
+import { getClaudeUsage } from "@opencode-ai/core/claude"
 
 import { useLocal } from "../context/local"
 import { useSync } from "../context/sync"
@@ -88,6 +89,9 @@ function groupNameFor(
   if (providerID === "codex") {
     return "Codex"
   }
+  if (providerID === "claude") {
+    return "Claude"
+  }
 
   return modelID.startsWith("gemini")
     ? "Gemini Models"
@@ -100,6 +104,9 @@ function providerName(
 ): string {
   if (providerID === "codex") {
     return "Codex"
+  }
+  if (providerID === "claude") {
+    return "Claude"
   }
 
   return "Antigravity"
@@ -671,7 +678,9 @@ export function DialogUsage() {
       const groups =
         model?.providerID === "codex"
           ? await getCodexUsage(force)
-          : await getAgyUsage(force)
+          : model?.providerID === "claude"
+            ? await getClaudeUsage(force)
+            : await getAgyUsage(force)
 
 
       const wantedGroup =

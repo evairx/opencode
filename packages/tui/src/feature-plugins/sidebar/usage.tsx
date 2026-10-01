@@ -3,6 +3,7 @@ import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, createSignal, createEffect, on, onMount, onCleanup, Show } from "solid-js"
 import { getAgyUsage, type AgyUsageBucket, type AgyUsageGroup } from "@opencode-ai/core/antigravity"
 import { getCodexUsage } from "@opencode-ai/core/codex"
+import { getClaudeUsage } from "@opencode-ai/core/claude"
 import { useLocal } from "../../context/local"
 
 const id = "internal:sidebar-usage"
@@ -41,6 +42,9 @@ function groupNameFor(providerID: string | undefined, modelID: string): string {
   if (providerID === "codex") {
     return "Codex"
   }
+  if (providerID === "claude") {
+    return "Claude"
+  }
   return modelID.startsWith("gemini") ? "Gemini Models" : "Claude and GPT models"
 }
 
@@ -78,7 +82,9 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       const groups =
         currentModel.providerID === "codex"
           ? await getCodexUsage(force)
-          : await getAgyUsage(force)
+          : currentModel.providerID === "claude"
+            ? await getClaudeUsage(force)
+            : await getAgyUsage(force)
 
       const wantedGroup = groupNameFor(currentModel.providerID, currentModel.modelID)
       const found = groups.find((item) => item.name === wantedGroup) ?? groups[0]

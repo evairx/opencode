@@ -24,8 +24,9 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   "opencode-go": 1,
   openai: 2,
   "github-copilot": 3,
-  anthropic: 4,
-  google: 5,
+  claude: 4,
+  anthropic: 5,
+  google: 6,
 }
 
 const CUSTOM_PROVIDER_OPTION_VALUE = "__opencode_custom_provider__"
@@ -64,6 +65,7 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
         description: {
           opencode: "(Recommended)",
           anthropic: "(API key)",
+          claude: "(Claude Code Pro/Max)",
           openai: "(ChatGPT Plus/Pro or API key)",
           "opencode-go": "Low cost subscription for everyone",
         }[provider.id],

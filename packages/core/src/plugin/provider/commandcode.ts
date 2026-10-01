@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
-import { COMMANDCODE_BASE_URL, COMMANDCODE_MODELS, COMMANDCODE_VARIANTS } from "../../commandcode"
+import { COMMANDCODE_BASE_URL, COMMANDCODE_VARIANTS, getCommandCodeModels } from "../../commandcode"
 import { define } from "../internal"
 
 const providerID = ProviderV2.ID.make("commandcode")
@@ -29,7 +29,7 @@ export const CommandCodePlugin = define({
           url: COMMANDCODE_BASE_URL,
         }
       })
-      for (const def of COMMANDCODE_MODELS) {
+      for (const def of getCommandCodeModels()) {
         const modelID = ModelV2.ID.make(def.id)
         catalog.model.update(providerID, modelID, (model) => {
           model.name = def.name

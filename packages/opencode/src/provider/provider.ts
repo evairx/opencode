@@ -32,8 +32,22 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
-import { COMMANDCODE_BASE_URL, COMMANDCODE_MODELS, COMMANDCODE_VARIANTS } from "@opencode-ai/core/commandcode"
-import { CODEX_BASE_URL, CODEX_MODELS } from "@opencode-ai/core/codex"
+import {
+  COMMANDCODE_BASE_URL,
+  COMMANDCODE_MODELS,
+  COMMANDCODE_VARIANTS,
+  type CommandCodeModelDefinition,
+  getCommandCodeModels,
+  refreshCommandCodeModels,
+} from "@opencode-ai/core/commandcode"
+import { CODEX_BASE_URL, type CodexModel, getCodexModels, refreshCodexModels } from "@opencode-ai/core/codex"
+import {
+  CLAUDE_BASE_URL,
+  type ClaudeModel,
+  getClaudeModels,
+  refreshClaudeModels,
+  readStoredClaudeAuth,
+} from "@opencode-ai/core/claude"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 
@@ -144,6 +158,10 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
     import("@opencode-ai/core/antigravity").then((m) => (opts: Record<string, unknown>) => ({
       languageModel: (modelID: string) => m.createLanguageModel(modelID, opts),
     })),
+  "opencode-claude": () =>
+    import("@opencode-ai/core/claude").then((m) => (opts: Record<string, unknown>) => ({
+      languageModel: (modelID: string) => m.createClaudeLanguageModel(modelID, opts),
+    })),
 }
 
 type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>, model?: Model) => Promise<any>
@@ -205,6 +223,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           baseURL: COMMANDCODE_BASE_URL,
           ...(token ? { apiKey: token } : {}),
         },
+        async discoverModels(): Promise<Record<string, Model>> {
+          const fresh = await refreshCommandCodeModels()
+          return Object.fromEntries(fresh.map((item) => [item.id, toCommandCodeModel(item)]))
+        },
       }
     }),
     codex: Effect.fnUntraced(function* (input: Info) {
@@ -226,8 +248,24 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           baseURL: CODEX_BASE_URL,
           ...(token ? { apiKey: token } : {}),
         },
+        async discoverModels(): Promise<Record<string, Model>> {
+          const fresh = await refreshCodexModels()
+          return Object.fromEntries(fresh.map((item) => [item.id, toCodexModel(item)]))
+        },
       }
     }),
+    claude: () =>
+      Effect.succeed({
+        // Auth lives in Claude Code CLI keyring or credentials file, just like Antigravity.
+        autoload: true,
+        async getModel(sdk: BundledSDK, modelID: string) {
+          return sdk.languageModel(modelID)
+        },
+        async discoverModels(): Promise<Record<string, Model>> {
+          const fresh = await refreshClaudeModels()
+          return Object.fromEntries(fresh.map((item) => [item.id, toClaudeModel(item)]))
+        },
+      }),
     anthropic: () =>
       Effect.succeed({
         autoload: false,
@@ -1538,9 +1576,9 @@ function antigravityProvider(): Info {
   }
 }
 
-function commandcodeProvider(): Info {
+function toCommandCodeModel(input: CommandCodeModelDefinition): Model {
   const providerID = ProviderV2.ID.make("commandcode")
-  const model = (input: (typeof COMMANDCODE_MODELS)[number]): Model => ({
+  return {
     id: ModelV2.ID.make(input.id),
     providerID,
     name: input.name,
@@ -1577,7 +1615,12 @@ function commandcodeProvider(): Info {
       : {
           variants: Object.fromEntries(Object.entries(COMMANDCODE_VARIANTS).map(([id, body]) => [id, { ...body }])),
         }),
-  })
+  }
+}
+
+function commandcodeProvider(): Info {
+  const providerID = ProviderV2.ID.make("commandcode")
+  const models = getCommandCodeModels()
 
   return {
     id: providerID,
@@ -1585,13 +1628,13 @@ function commandcodeProvider(): Info {
     source: "custom",
     env: ["CMD_API_KEY"],
     options: { baseURL: COMMANDCODE_BASE_URL },
-    models: Object.fromEntries(COMMANDCODE_MODELS.map((item) => [item.id, model(item)])),
+    models: Object.fromEntries(models.map((item) => [item.id, toCommandCodeModel(item)])),
   }
 }
 
-function codexProvider(): Info {
+export function toCodexModel(def: CodexModel): Model {
   const providerID = ProviderV2.ID.make("codex")
-  const model = (def: (typeof CODEX_MODELS)[number]): Model => ({
+  return {
     id: ModelV2.ID.make(def.id),
     providerID,
     name: def.name,
@@ -1623,7 +1666,12 @@ function codexProvider(): Info {
     // Responses setting through ProviderTransform.providerOptions. Models
     // without a ladder (Codex Spark) expose no variants.
     variants: Object.fromEntries((def.variants ?? []).map((effort) => [effort, { reasoningEffort: effort }])),
-  })
+  }
+}
+
+function codexProvider(): Info {
+  const providerID = ProviderV2.ID.make("codex")
+  const models = getCodexModels()
 
   return {
     id: providerID,
@@ -1631,7 +1679,54 @@ function codexProvider(): Info {
     source: "custom",
     env: ["CODEX_API_KEY"],
     options: { baseURL: CODEX_BASE_URL },
-    models: Object.fromEntries(CODEX_MODELS.map((item) => [item.id, model(item)])),
+    models: Object.fromEntries(models.map((item) => [item.id, toCodexModel(item)])),
+  }
+}
+
+export function toClaudeModel(def: ClaudeModel): Model {
+  const providerID = ProviderV2.ID.make("claude")
+  return {
+    id: ModelV2.ID.make(def.id),
+    providerID,
+    name: def.name,
+    family: def.family ?? "claude",
+    api: { id: def.id, npm: "opencode-claude", url: "" },
+    status: "active",
+    headers: {},
+    options: {},
+    cost: {
+      input: def.price.input,
+      output: def.price.output,
+      cache: { read: def.price.cache?.read ?? 0, write: def.price.cache?.write ?? 0 },
+    },
+    limit: { context: def.context, input: def.input ?? def.context, output: def.output ?? 64_000 },
+    capabilities: {
+      temperature: false,
+      reasoning: true,
+      attachment: false,
+      toolcall: false,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    release_date: "",
+    variants: Object.fromEntries(
+      (def.variants ?? []).map((effort) => [effort, { effort }]),
+    ),
+  }
+}
+
+function claudeProvider(): Info {
+  const providerID = ProviderV2.ID.make("claude")
+  const models = getClaudeModels()
+
+  return {
+    id: providerID,
+    name: "Claude",
+    source: "custom",
+    env: ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"],
+    options: {},
+    models: Object.fromEntries(models.map((item) => [item.id, toClaudeModel(item)])),
   }
 }
 
@@ -1700,6 +1795,8 @@ const layer = Layer.effect(
         catalog[commandcode.id] = commandcode
         const codex = codexProvider()
         catalog[codex.id] = codex
+        const claude = claudeProvider()
+        catalog[claude.id] = claude
         const database = mapValues(catalog, toPublicInfo)
 
         const providers: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>
@@ -1951,18 +2048,24 @@ const layer = Layer.effect(
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderV2.ID.make("gitlab")
-        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
-          yield* Effect.promise(async () => {
-            try {
-              const discovered = await discoveryLoaders[gitlab]()
-              for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[gitlab].models[modelID]) {
-                  providers[gitlab].models[modelID] = model
+        for (const [id, loader] of Object.entries(discoveryLoaders)) {
+          const providerID = ProviderV2.ID.make(id)
+          if (providers[providerID] && isProviderAllowed(providerID)) {
+            yield* Effect.promise(async () => {
+              try {
+                const discovered = await loader()
+                for (const [modelID, model] of Object.entries(discovered)) {
+                  if (id === "gitlab") {
+                    if (!providers[providerID].models[modelID]) {
+                      providers[providerID].models[modelID] = model
+                    }
+                  } else {
+                    providers[providerID].models[modelID] = model
+                  }
                 }
-              }
-            } catch (e) {}
-          })
+              } catch (e) {}
+            })
+          }
         }
 
         for (const [id, provider] of Object.entries(providers)) {

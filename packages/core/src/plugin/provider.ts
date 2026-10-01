@@ -1,6 +1,7 @@
 import { AlibabaPlugin } from "./provider/alibaba"
 import { AntigravityPlugin } from "./provider/antigravity"
 import { CodexPlugin } from "./provider/codex"
+import { ClaudePlugin } from "./provider/claude"
 import { CommandCodePlugin } from "./provider/commandcode"
 import { AmazonBedrockPlugin } from "./provider/amazon-bedrock"
 import { AnthropicPlugin } from "./provider/anthropic"
@@ -41,6 +42,7 @@ export const ProviderPlugins: PluginInternal.Plugin<PluginInternal.Requirements 
   AlibabaPlugin,
   ...(Flag.OPENCODE_DISABLE_ANTIGRAVITY ? [] : [AntigravityPlugin]),
   CodexPlugin,
+  ClaudePlugin,
   CommandCodePlugin,
   AmazonBedrockPlugin,
   AnthropicPlugin,

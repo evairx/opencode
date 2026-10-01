@@ -1,3 +1,4 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { readFile, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
@@ -281,13 +282,14 @@ export interface CodexModel {
   output?: number
   /** USD per 1M tokens, used by OpenCode to estimate cost. */
   price: { input: number; output: number; cache?: { read: number; write: number } }
+  shortContext?: { input: number; cachedInput: number; cacheWrites: number; output: number }
+  longContext?: { input: number; cachedInput: number; cacheWrites: number; output: number }
   variants?: readonly string[]
 }
 
 // Model identifiers are the backend names the Codex CLI sends verbatim to
 // `chatgpt.com/backend-api/codex/responses` (mirrors OpenClaude's alias table).
-// The prices are the list-price equivalents used for the local cost estimate;
-// the /usage dialog also shows the WHAM plan quotas.
+// Default prices are extracted from https://developers.openai.com/api/docs/pricing
 export const CODEX_MODELS: CodexModel[] = [
   {
     id: "gpt-6-astra",
@@ -296,7 +298,9 @@ export const CODEX_MODELS: CodexModel[] = [
     context: 400_000,
     input: 272_000,
     output: 128_000,
-    price: { input: 10, output: 50 },
+    price: { input: 10, output: 50, cache: { read: 1, write: 12.5 } },
+    shortContext: { input: 10, cachedInput: 1, cacheWrites: 12.5, output: 50 },
+    longContext: { input: 20, cachedInput: 2, cacheWrites: 25, output: 75 },
     variants: ["low", "medium", "high", "xhigh"],
   },
   {
@@ -306,17 +310,9 @@ export const CODEX_MODELS: CodexModel[] = [
     context: 400_000,
     input: 272_000,
     output: 128_000,
-    price: { input: 2, output: 10 },
-    variants: ["low", "medium", "high", "xhigh"],
-  },
-  {
-    id: "gpt-6-sol",
-    name: "GPT 6 Sol",
-    family: "codex",
-    context: 400_000,
-    input: 272_000,
-    output: 128_000,
-    price: { input: 2, output: 10 },
+    price: { input: 2, output: 10, cache: { read: 0.1, write: 2.5 } },
+    shortContext: { input: 2, cachedInput: 0.1, cacheWrites: 2.5, output: 10 },
+    longContext: { input: 4, cachedInput: 0.2, cacheWrites: 5, output: 15 },
     variants: ["low", "medium", "high", "xhigh"],
   },
   {
@@ -326,9 +322,21 @@ export const CODEX_MODELS: CodexModel[] = [
     context: 400_000,
     input: 272_000,
     output: 128_000,
-    // Cache pricing is not published yet, so cached tokens fall back to the
-    // real list price instead of an estimated discount.
-    price: { input: 0.1, output: 0.5, cache: { read: 0.1, write: 0.1 } },
+    price: { input: 0.1, output: 0.5, cache: { read: 0.01, write: 0.125 } },
+    shortContext: { input: 0.1, cachedInput: 0.01, cacheWrites: 0.125, output: 0.5 },
+    longContext: { input: 0.2, cachedInput: 0.02, cacheWrites: 0.25, output: 0.75 },
+    variants: ["low", "medium", "high", "xhigh"],
+  },
+  {
+    id: "gpt-6-sol",
+    name: "GPT 6 Sol",
+    family: "codex",
+    context: 400_000,
+    input: 272_000,
+    output: 128_000,
+    price: { input: 2, output: 10, cache: { read: 0.2, write: 2.5 } },
+    shortContext: { input: 2, cachedInput: 0.2, cacheWrites: 2.5, output: 10 },
+    longContext: { input: 4, cachedInput: 0.4, cacheWrites: 5, output: 15 },
     variants: ["low", "medium", "high", "xhigh"],
   },
   {
@@ -338,7 +346,9 @@ export const CODEX_MODELS: CodexModel[] = [
     context: 400_000,
     input: 272_000,
     output: 128_000,
-    price: { input: 2, output: 10 },
+    price: { input: 4, output: 20, cache: { read: 0.4, write: 5 } },
+    shortContext: { input: 4, cachedInput: 0.4, cacheWrites: 5, output: 20 },
+    longContext: { input: 8, cachedInput: 0.8, cacheWrites: 10, output: 30 },
     variants: ["low", "medium", "high", "xhigh"],
   },
   {
@@ -349,6 +359,8 @@ export const CODEX_MODELS: CodexModel[] = [
     input: 272_000,
     output: 128_000,
     price: { input: 2, output: 12, cache: { read: 0.2, write: 2.5 } },
+    shortContext: { input: 2, cachedInput: 0.2, cacheWrites: 2.5, output: 12 },
+    longContext: { input: 4, cachedInput: 0.4, cacheWrites: 5, output: 18 },
     variants: ["low", "medium", "high", "xhigh"],
   },
   {
@@ -359,6 +371,8 @@ export const CODEX_MODELS: CodexModel[] = [
     input: 272_000,
     output: 128_000,
     price: { input: 0.2, output: 1.2, cache: { read: 0.02, write: 0.25 } },
+    shortContext: { input: 0.2, cachedInput: 0.02, cacheWrites: 0.25, output: 1.2 },
+    longContext: { input: 0.4, cachedInput: 0.04, cacheWrites: 0.5, output: 1.8 },
     variants: ["low", "medium", "high", "xhigh"],
   },
   {
@@ -369,18 +383,220 @@ export const CODEX_MODELS: CodexModel[] = [
     input: 272_000,
     output: 128_000,
     price: { input: 5, output: 30, cache: { read: 0.5, write: 0 } },
+    shortContext: { input: 5, cachedInput: 0.5, cacheWrites: 0, output: 30 },
+    longContext: { input: 10, cachedInput: 1, cacheWrites: 0, output: 45 },
     variants: ["low", "medium", "high", "xhigh"],
   },
-  {
-    id: "gpt-5.3-codex-spark",
-    name: "GPT 5.3 Codex Spark",
-    family: "codex",
-    context: 400_000,
-    input: 272_000,
-    output: 128_000,
-    price: { input: 1.75, output: 14 },
-  },
 ]
+
+// ============================================================
+// Scraper & Dynamic Model Catalog
+// ============================================================
+
+const CODEX_PRICING_URL = "https://developers.openai.com/api/docs/pricing"
+
+const BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+  "Cache-Control": "no-cache",
+}
+
+async function fetchPage(url: string, timeoutMs = 12_000): Promise<string> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(url, {
+      headers: BROWSER_HEADERS,
+      signal: controller.signal,
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`)
+    return await res.text()
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+}
+
+function formatModelName(id: string): string {
+  return id
+    .split("-")
+    .map((part) => (part === "gpt" ? "GPT" : part.charAt(0).toUpperCase() + part.slice(1)))
+    .join(" ")
+}
+
+export async function scrapeCodexModels(timeoutMs = 12_000): Promise<CodexModel[]> {
+  const html = await fetchPage(CODEX_PRICING_URL, timeoutMs)
+
+  // 1. Extract rows from Astro Island "TextTokenPricingTables"
+  const islands = [...html.matchAll(/<astro-island\b([^>]*)>/g)]
+  let standardRows: any[] = []
+
+  for (const tag of islands) {
+    const attrs = tag[1]
+    if (attrs.includes("TextTokenPricingTables")) {
+      const propsMatch = attrs.match(/props="([^"]+)"/)
+      if (propsMatch) {
+        const decoded = decodeHtmlEntities(propsMatch[1])
+        try {
+          const parsed = JSON.parse(decoded)
+          if (parsed.tier && parsed.tier[1] === "standard" && Array.isArray(parsed.rows?.[1])) {
+            standardRows = parsed.rows[1]
+            break
+          }
+        } catch {}
+      }
+    }
+  }
+
+  // 2. Extract Long Context table from companion JS bundle
+  let longContextMap: Record<string, Record<string, unknown>> = {}
+  const jsMatch = html.match(/component-url="(\/_astro\/pricing\.[^"]+\.js[^"]*)"/)
+  if (jsMatch) {
+    try {
+      const jsUrl = new URL(jsMatch[1], CODEX_PRICING_URL).toString()
+      const jsText = await fetchPage(jsUrl, 8000)
+      const lMatch = jsText.match(/standard:(\{[\s\S]*?\}),fast:/)
+      if (lMatch) {
+        longContextMap = new Function(`return (${lMatch[1]})`)()
+      }
+    } catch {}
+  }
+
+  const parseNumber = (val: unknown): number => {
+    if (typeof val === "number") return val
+    if (!val || val === "-" || val === "—") return 0
+    const num = parseFloat(String(val).replace(/[^0-9.]/g, ""))
+    return isNaN(num) ? 0 : num
+  }
+
+  const models: CodexModel[] = []
+
+  for (const item of standardRows) {
+    const row = item[1]
+    if (!row || !row[0]) continue
+
+    const rawName = String(row[0][1] || "")
+    const cleanId = rawName.replace(/ \(.+$/, "").trim()
+
+    // Stop and exclude gpt-5.5-pro and below
+    if (cleanId === "gpt-5.5-pro") {
+      break
+    }
+
+    const isTargetRange =
+      cleanId.startsWith("gpt-6") ||
+      cleanId.startsWith("gpt-5.6") ||
+      cleanId === "gpt-5.5"
+
+    if (!isTargetRange) continue
+
+    const shortInput = parseNumber(row[1]?.[1])
+    const shortCached = parseNumber(row[2]?.[1])
+    const shortWrite = parseNumber(row[3]?.[1])
+    const shortOutput = parseNumber(row[4]?.[1])
+
+    const long = longContextMap[cleanId] || {}
+    const longInput = parseNumber(long.input)
+    const longCached = parseNumber(long.cachedInput)
+    const longWrite = parseNumber(long.cacheWrite)
+    const longOutput = parseNumber(long.output)
+
+    models.push({
+      id: cleanId,
+      name: formatModelName(cleanId),
+      family: "codex",
+      context: 400_000,
+      input: 272_000,
+      output: 128_000,
+      shortContext: {
+        input: shortInput,
+        cachedInput: shortCached,
+        cacheWrites: shortWrite,
+        output: shortOutput,
+      },
+      longContext: {
+        input: longInput,
+        cachedInput: longCached,
+        cacheWrites: longWrite,
+        output: longOutput,
+      },
+      price: {
+        input: shortInput,
+        output: shortOutput,
+        cache: {
+          read: shortCached,
+          write: shortWrite,
+        },
+      },
+      variants: ["low", "medium", "high", "xhigh"],
+    })
+  }
+
+  return models
+}
+
+let memoryCache: CodexModel[] | undefined
+
+export function loadCachedCodexModels(): { models: CodexModel[]; isFresh: boolean } | undefined {
+  if (memoryCache && memoryCache.length > 0) {
+    return { models: memoryCache, isFresh: true }
+  }
+  try {
+    const file = path.join(Global.Path.cache, "codex-models.json")
+    if (!existsSync(file)) return undefined
+    const content = readFileSync(file, "utf8")
+    const parsed = JSON.parse(content)
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      memoryCache = parsed
+      return { models: parsed, isFresh: false }
+    }
+    if (parsed && Array.isArray(parsed.models) && parsed.models.length > 0) {
+      memoryCache = parsed.models
+      const isFresh = Date.now() - (parsed.updatedAt || 0) < 1000 * 60 * 60 * 2 // 2 hours
+      return { models: parsed.models, isFresh }
+    }
+  } catch {}
+  return undefined
+}
+
+export function saveCachedCodexModels(models: CodexModel[]): void {
+  try {
+    memoryCache = models
+    const file = path.join(Global.Path.cache, "codex-models.json")
+    mkdirSync(path.dirname(file), { recursive: true })
+    writeFileSync(file, JSON.stringify({ updatedAt: Date.now(), models }, null, 2), "utf8")
+  } catch {}
+}
+
+export function getCodexModels(): CodexModel[] {
+  const cached = loadCachedCodexModels()
+  if (cached?.models && cached.models.length > 0) return cached.models
+  return CODEX_MODELS
+}
+
+export async function refreshCodexModels(force = false): Promise<CodexModel[]> {
+  const cached = loadCachedCodexModels()
+  if (!force && cached?.isFresh) {
+    return cached.models
+  }
+
+  const scraped = await scrapeCodexModels().catch(() => [])
+  if (scraped.length > 0) {
+    saveCachedCodexModels(scraped)
+    return scraped
+  }
+
+  return cached?.models ?? CODEX_MODELS
+}
 
 // ============================================================
 // WHAM usage (rendered by the same dialog Antigravity uses)
