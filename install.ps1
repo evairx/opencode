@@ -11,7 +11,7 @@
       4. Makes sure ~\.opencode\bin is first on the user PATH.
       Your config files and plugins are NOT touched.
 
-    Pinning a version (-Version, e.g. "1.0b") overrides the auto-detected
+    Pinning a version (-Version, e.g. "2b") overrides the auto-detected
     latest release.
 
     Optional cleanup (-Clean):
@@ -25,14 +25,14 @@
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File install.ps1
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File install.ps1 -Version 1.0b
+    powershell -ExecutionPolicy Bypass -File install.ps1 -Version 2b
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File install.ps1 -Force
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File install.ps1 -Clean
 #>
 param(
-    # Empty by default = install the latest GitHub release. Pass e.g. "1.0b" to pin.
+    # Empty by default = install the latest GitHub release. Pass e.g. "2b" to pin.
     [string]$Version = "",
     [string]$Repo = "evairx/opencode",
     [switch]$Force,
@@ -194,7 +194,7 @@ if ($Version) {
         Write-Info "Detected latest release: v$latest"
         $Version = $latest.TrimStart("v")
     } else {
-        Write-Warn "Could not detect the latest release. Pass -Version (e.g. -Version 1.0b)."
+        Write-Warn "Could not detect the latest release. Pass -Version (e.g. -Version 2b)."
         exit 1
     }
 }

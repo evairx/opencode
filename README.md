@@ -9,7 +9,7 @@
 </p>
 <p align="center"><b>evairx opencode</b> — a personal fork of the open source AI coding agent.</p>
 <p align="center">
-  <a href="https://github.com/evairx/opencode/releases"><img alt="Release" src="https://img.shields.io/badge/release-v1.0b-7c3aed?style=flat-square" /></a>
+  <a href="https://github.com/evairx/opencode/releases"><img alt="Release" src="https://img.shields.io/badge/release-v2b-7c3aed?style=flat-square" /></a>
   <a href="https://github.com/anomalyco/opencode"><img alt="Upstream" src="https://img.shields.io/badge/upstream-anomalyco%2Fopencode-18181b?style=flat-square" /></a>
 </p>
 
